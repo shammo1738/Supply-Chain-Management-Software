@@ -1,0 +1,1867 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sales Forecast Pro</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<style>
+/* ===== CSS Reset & Variables ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f5f7fa;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f8f9fb;
+  --text: #1a1a2e;
+  --text-secondary: #64748b;
+  --border: #e2e8f0;
+  --primary: #3b82f6;
+  --primary-hover: #2563eb;
+  --primary-light: #dbeafe;
+  --accent: #10b981;
+  --accent-hover: #059669;
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --warning: #f59e0b;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.06);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --nav-height: 56px;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+[data-theme="dark"] {
+  --bg: #0f172a;
+  --bg-card: #1e293b;
+  --bg-card-hover: #273548;
+  --text: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --border: #334155;
+  --primary-light: #1e3a5f;
+  --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.3);
+}
+
+html { font-size: 15px; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  min-height: 100vh;
+}
+a { color: var(--primary); text-decoration: none; }
+
+/* ===== Nav ===== */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  height: var(--nav-height);
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 20px;
+  box-shadow: var(--shadow);
+}
+.nav-brand {
+  font-weight: 700; font-size: 1.15rem; margin-right: 32px;
+  display: flex; align-items: center; gap: 8px;
+  color: var(--primary);
+}
+.nav-brand svg { width: 22px; height: 22px; }
+.nav-tabs { display: flex; gap: 4px; flex: 1; }
+.nav-tab {
+  padding: 8px 18px; border-radius: var(--radius-sm);
+  cursor: pointer; font-weight: 500; font-size: 0.9rem;
+  color: var(--text-secondary); transition: all 0.15s;
+  border: none; background: none;
+}
+.nav-tab:hover { background: var(--primary-light); color: var(--primary); }
+.nav-tab.active { background: var(--primary); color: #fff; }
+.nav-actions { display: flex; align-items: center; gap: 10px; }
+.theme-toggle {
+  width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--bg); cursor: pointer; display: flex; align-items: center;
+  justify-content: center; font-size: 1.1rem; transition: 0.15s;
+}
+.theme-toggle:hover { border-color: var(--primary); }
+
+/* ===== Main Content ===== */
+main {
+  padding: calc(var(--nav-height) + 20px) 20px 20px;
+  max-width: 1280px; margin: 0 auto;
+}
+.screen { display: none; }
+.screen.active { display: block; }
+
+/* ===== Cards ===== */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.card-title {
+  font-size: 1.05rem; font-weight: 600; margin-bottom: 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.card-title svg { width: 18px; height: 18px; color: var(--primary); }
+
+/* ===== Buttons ===== */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: var(--radius-sm);
+  font-size: 0.875rem; font-weight: 500; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg-card);
+  color: var(--text); transition: all 0.15s;
+}
+.btn:hover { background: var(--bg-card-hover); }
+.btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-accent:hover { background: var(--accent-hover); }
+.btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+.btn-danger:hover { background: var(--danger-hover); }
+.btn-sm { padding: 5px 10px; font-size: 0.8rem; }
+.btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ===== Inputs ===== */
+input[type="text"], input[type="number"], input[type="date"], select, textarea {
+  padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg); color: var(--text); font-size: 0.875rem;
+  font-family: var(--font); width: 100%; transition: border-color 0.15s;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+}
+label { font-size: 0.85rem; font-weight: 500; display: block; margin-bottom: 4px; }
+.form-group { margin-bottom: 14px; }
+.form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+
+/* ===== Tables ===== */
+.table-wrap {
+  overflow-x: auto; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); max-height: 400px; overflow-y: auto;
+}
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+th {
+  background: var(--bg); position: sticky; top: 0; z-index: 1;
+  font-weight: 600; font-size: 0.8rem; text-transform: uppercase;
+  letter-spacing: 0.03em; color: var(--text-secondary);
+}
+tr:hover td { background: var(--bg-card-hover); }
+
+/* ===== Drag & Drop ===== */
+.drop-zone {
+  border: 2px dashed var(--border); border-radius: var(--radius);
+  padding: 40px; text-align: center; cursor: pointer;
+  transition: all 0.2s; color: var(--text-secondary);
+}
+.drop-zone:hover, .drop-zone.dragover {
+  border-color: var(--primary); background: var(--primary-light);
+  color: var(--primary);
+}
+.drop-zone svg { width: 40px; height: 40px; margin-bottom: 12px; opacity: 0.5; }
+.drop-zone p { font-size: 0.95rem; }
+.drop-zone .hint { font-size: 0.8rem; margin-top: 6px; }
+
+/* ===== Checkboxes ===== */
+.checkbox-group { display: flex; flex-wrap: wrap; gap: 10px; }
+.checkbox-label {
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+  font-size: 0.875rem; padding: 6px 12px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); transition: 0.15s;
+}
+.checkbox-label:hover { border-color: var(--primary); }
+.checkbox-label input { accent-color: var(--primary); }
+.checkbox-label.checked { background: var(--primary-light); border-color: var(--primary); }
+
+/* ===== Stat Cards ===== */
+.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stat-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px; text-align: center;
+}
+.stat-value { font-size: 1.4rem; font-weight: 700; color: var(--primary); }
+.stat-label { font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px; }
+
+/* ===== Slider ===== */
+input[type="range"] {
+  -webkit-appearance: none; width: 100%; height: 6px;
+  border-radius: 3px; background: var(--border); outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 18px; height: 18px;
+  border-radius: 50%; background: var(--primary); cursor: pointer;
+}
+.slider-row {
+  display: flex; align-items: center; gap: 12px;
+}
+.slider-row input[type="range"] { flex: 1; }
+.slider-value {
+  min-width: 40px; text-align: center; font-weight: 600;
+  font-size: 0.85rem; color: var(--primary);
+}
+
+/* ===== Method Cards ===== */
+.method-params {
+  display: none; padding: 12px; margin-top: 8px;
+  background: var(--bg); border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+.method-params.visible { display: block; }
+
+/* ===== Chart Container ===== */
+.chart-container {
+  position: relative; width: 100%;
+  background: var(--bg-card); border-radius: var(--radius-sm);
+  padding: 10px;
+}
+.chart-container canvas { max-height: 400px; }
+
+/* ===== Comparison ===== */
+.best-method {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #fff; border-radius: var(--radius); padding: 16px 20px;
+  margin-bottom: 16px; display: flex; align-items: center; gap: 12px;
+}
+.best-method .trophy { font-size: 1.8rem; }
+.best-method h3 { font-size: 1.1rem; }
+.best-method p { font-size: 0.85rem; opacity: 0.9; }
+
+/* ===== Report Print ===== */
+@media print {
+  nav, .no-print { display: none !important; }
+  main { padding: 0 !important; max-width: 100% !important; }
+  .card { box-shadow: none !important; border: 1px solid #ddd !important; break-inside: avoid; }
+  body { background: #fff !important; color: #000 !important; }
+  .screen { display: none !important; }
+  #screen-report { display: block !important; }
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+  .nav-brand span { display: none; }
+  .nav-tab { padding: 8px 12px; font-size: 0.82rem; }
+  main { padding: calc(var(--nav-height) + 12px) 12px 12px; }
+  .form-row { grid-template-columns: 1fr; }
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ===== Misc ===== */
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 20px;
+  font-size: 0.7rem; font-weight: 600;
+}
+.badge-green { background: #d1fae5; color: #065f46; }
+.badge-blue { background: #dbeafe; color: #1e40af; }
+.badge-yellow { background: #fef3c7; color: #92400e; }
+[data-theme="dark"] .badge-green { background: #064e3b; color: #6ee7b7; }
+[data-theme="dark"] .badge-blue { background: #1e3a5f; color: #93c5fd; }
+[data-theme="dark"] .badge-yellow { background: #78350f; color: #fcd34d; }
+
+.empty-state {
+  text-align: center; padding: 40px; color: var(--text-secondary);
+}
+.empty-state svg { width: 48px; height: 48px; margin-bottom: 12px; opacity: 0.4; }
+.empty-state p { font-size: 0.95rem; }
+.toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 999;
+  background: var(--text); color: var(--bg); padding: 12px 20px;
+  border-radius: var(--radius-sm); font-size: 0.875rem;
+  box-shadow: var(--shadow-lg); transform: translateY(80px); opacity: 0;
+  transition: all 0.3s ease;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.section-divider { height: 1px; background: var(--border); margin: 16px 0; }
+.text-muted { color: var(--text-secondary); font-size: 0.85rem; }
+.mb-12 { margin-bottom: 12px; }
+.mt-12 { margin-top: 12px; }
+.gap-8 { gap: 8px; }
+.flex { display: flex; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.flex-wrap { flex-wrap: wrap; }
+.inline-input {
+  width: 70px !important; display: inline-block; text-align: center;
+  padding: 4px 6px !important;
+}
+.manual-table input {
+  border: none; background: transparent; width: 100%;
+  padding: 4px; font-size: 0.85rem; color: var(--text);
+}
+.manual-table input:focus { outline: none; background: var(--primary-light); }
+.manual-table td { padding: 4px 8px; }
+.saved-datasets { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.dataset-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border: 1px solid var(--border);
+  border-radius: 20px; font-size: 0.8rem; cursor: pointer;
+  transition: 0.15s;
+}
+.dataset-chip:hover { border-color: var(--primary); background: var(--primary-light); }
+.dataset-chip .del {
+  width: 16px; height: 16px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; background: var(--danger); color: #fff;
+  cursor: pointer;
+}
+</style>
+</head>
+<body>
+
+<!-- ===== Nav ===== -->
+<nav>
+  <div class="nav-brand">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 4 4-6"/></svg>
+    <span>Sales Forecast Pro</span>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" data-screen="data">Data</button>
+    <button class="nav-tab" data-screen="forecast">Forecast</button>
+    <button class="nav-tab" data-screen="compare">Compare</button>
+    <button class="nav-tab" data-screen="report">Report</button>
+  </div>
+  <div class="nav-actions">
+    <button class="theme-toggle" id="themeToggle" title="Toggle theme">&#9789;</button>
+  </div>
+</nav>
+
+<!-- ===== Main ===== -->
+<main>
+
+<!-- ==================== DATA SCREEN ==================== -->
+<div id="screen-data" class="screen active">
+
+  <!-- Saved Datasets -->
+  <div class="card">
+    <div class="card-title flex justify-between">
+      <span>Saved Datasets</span>
+    </div>
+    <div id="savedDatasets" class="saved-datasets">
+      <span class="text-muted">No saved datasets yet.</span>
+    </div>
+  </div>
+
+  <!-- CSV Upload -->
+  <div class="card">
+    <div class="card-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
+      Import CSV
+    </div>
+    <div id="dropZone" class="drop-zone">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <p>Drag & drop a CSV file here, or click to browse</p>
+      <p class="hint">Expected columns: Date, Product/SKU (optional), Quantity, Revenue (optional)</p>
+    </div>
+    <input type="file" id="csvFileInput" accept=".csv,.txt" style="display:none">
+  </div>
+
+  <!-- Manual Entry -->
+  <div class="card">
+    <div class="card-title flex justify-between">
+      <span>Manual Entry</span>
+      <div class="btn-group">
+        <button class="btn btn-sm" onclick="addManualRow()">+ Add Row</button>
+        <button class="btn btn-sm btn-primary" onclick="loadManualData()">Load Data</button>
+      </div>
+    </div>
+    <div class="table-wrap" style="max-height:250px">
+      <table class="manual-table">
+        <thead><tr><th>Date</th><th>Product</th><th>Quantity</th><th>Revenue</th><th></th></tr></thead>
+        <tbody id="manualBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Dummy Data Generator -->
+  <div class="card">
+    <div class="card-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12l2 2 4-4"/></svg>
+      Generate Sample Data
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Time Range</label>
+        <select id="dummyYears">
+          <option value="1">1 Year</option>
+          <option value="2" selected>2 Years</option>
+          <option value="3">3 Years</option>
+          <option value="5">5 Years</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Seasonality</label>
+        <select id="dummySeason">
+          <option value="retail" selected>Retail (holiday peaks)</option>
+          <option value="summer">Summer peak</option>
+          <option value="flat">Flat (no seasonality)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Trend</label>
+        <select id="dummyTrend">
+          <option value="up" selected>Upward</option>
+          <option value="down">Downward</option>
+          <option value="flat">Flat</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Noise Level</label>
+        <select id="dummyNoise">
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Products</label>
+        <select id="dummyProducts">
+          <option value="1" selected>1 Product</option>
+          <option value="2">2 Products</option>
+          <option value="3">3 Products</option>
+          <option value="5">5 Products</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn btn-accent" onclick="generateDummyData()">Generate Data</button>
+  </div>
+
+  <!-- Data Preview -->
+  <div class="card" id="dataPreviewCard" style="display:none">
+    <div class="card-title flex justify-between">
+      <span>Data Preview</span>
+      <div class="btn-group">
+        <button class="btn btn-sm btn-primary" onclick="saveDataset()">Save Dataset</button>
+        <button class="btn btn-sm btn-danger" onclick="clearData()">Clear</button>
+      </div>
+    </div>
+    <div class="stats-row" id="dataStats"></div>
+    <div class="table-wrap" id="dataPreviewTable"></div>
+  </div>
+</div>
+
+<!-- ==================== FORECAST SCREEN ==================== -->
+<div id="screen-forecast" class="screen">
+
+  <div id="forecastNoData" class="empty-state">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <p>No data loaded. Go to the Data tab to import or generate data first.</p>
+  </div>
+
+  <div id="forecastContent" style="display:none">
+    <!-- Method Selection -->
+    <div class="card no-print">
+      <div class="card-title">Select Forecasting Methods</div>
+      <div class="checkbox-group" id="methodCheckboxes">
+        <label class="checkbox-label checked"><input type="checkbox" value="sma" checked> Simple Moving Average</label>
+        <label class="checkbox-label checked"><input type="checkbox" value="wma" checked> Weighted Moving Average</label>
+        <label class="checkbox-label checked"><input type="checkbox" value="ses" checked> Exponential Smoothing</label>
+        <label class="checkbox-label checked"><input type="checkbox" value="lr" checked> Linear Regression</label>
+        <label class="checkbox-label"><input type="checkbox" value="holt"> Holt's (Double Exp.)</label>
+        <label class="checkbox-label"><input type="checkbox" value="hw"> Holt-Winters (Triple)</label>
+        <label class="checkbox-label"><input type="checkbox" value="snaive"> Seasonal Naive</label>
+        <label class="checkbox-label"><input type="checkbox" value="decomp"> Seasonal Decomposition</label>
+      </div>
+    </div>
+
+    <!-- Parameters -->
+    <div class="card no-print">
+      <div class="card-title">Parameters</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Forecast Horizon (periods)</label>
+          <div class="slider-row">
+            <input type="range" id="horizon" min="1" max="24" value="6">
+            <span class="slider-value" id="horizonVal">6</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Product Filter</label>
+          <select id="productFilter"><option value="__all__">All Products (aggregated)</option></select>
+        </div>
+      </div>
+
+      <!-- SMA Params -->
+      <div class="method-params visible" id="params-sma">
+        <label>SMA Window Size</label>
+        <div class="slider-row">
+          <input type="range" id="smaWindow" min="2" max="12" value="3">
+          <span class="slider-value" id="smaWindowVal">3</span>
+        </div>
+      </div>
+
+      <!-- WMA Params -->
+      <div class="method-params visible" id="params-wma">
+        <label>WMA Window Size</label>
+        <div class="slider-row">
+          <input type="range" id="wmaWindow" min="2" max="12" value="3">
+          <span class="slider-value" id="wmaWindowVal">3</span>
+        </div>
+      </div>
+
+      <!-- SES Params -->
+      <div class="method-params visible" id="params-ses">
+        <label>SES Alpha (smoothing factor)</label>
+        <div class="slider-row">
+          <input type="range" id="sesAlpha" min="1" max="99" value="30">
+          <span class="slider-value" id="sesAlphaVal">0.30</span>
+        </div>
+      </div>
+
+      <!-- LR — no params -->
+      <div class="method-params visible" id="params-lr">
+        <span class="text-muted">Linear Regression has no tunable parameters.</span>
+      </div>
+
+      <!-- Holt's Params -->
+      <div class="method-params" id="params-holt">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Alpha (level)</label>
+            <div class="slider-row">
+              <input type="range" id="holtAlpha" min="1" max="99" value="30">
+              <span class="slider-value" id="holtAlphaVal">0.30</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Beta (trend)</label>
+            <div class="slider-row">
+              <input type="range" id="holtBeta" min="1" max="99" value="10">
+              <span class="slider-value" id="holtBetaVal">0.10</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Holt-Winters Params -->
+      <div class="method-params" id="params-hw">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Alpha (level)</label>
+            <div class="slider-row">
+              <input type="range" id="hwAlpha" min="1" max="99" value="30">
+              <span class="slider-value" id="hwAlphaVal">0.30</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Beta (trend)</label>
+            <div class="slider-row">
+              <input type="range" id="hwBeta" min="1" max="99" value="10">
+              <span class="slider-value" id="hwBetaVal">0.10</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Gamma (seasonality)</label>
+            <div class="slider-row">
+              <input type="range" id="hwGamma" min="1" max="99" value="30">
+              <span class="slider-value" id="hwGammaVal">0.30</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Seasonal Period</label>
+            <select id="hwPeriod">
+              <option value="4">4 (Quarterly)</option>
+              <option value="12" selected>12 (Monthly)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Variant</label>
+            <select id="hwVariant">
+              <option value="additive" selected>Additive</option>
+              <option value="multiplicative">Multiplicative</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Seasonal Naive Params -->
+      <div class="method-params" id="params-snaive">
+        <label>Season Length</label>
+        <select id="snaivePeriod">
+          <option value="4">4 (Quarterly)</option>
+          <option value="12" selected>12 (Monthly)</option>
+        </select>
+      </div>
+
+      <!-- Decomposition Params -->
+      <div class="method-params" id="params-decomp">
+        <label>Season Length</label>
+        <select id="decompPeriod">
+          <option value="4">4 (Quarterly)</option>
+          <option value="12" selected>12 (Monthly)</option>
+        </select>
+      </div>
+
+      <div class="section-divider"></div>
+      <button class="btn btn-primary" onclick="runForecast()">Run Forecast</button>
+    </div>
+
+    <!-- Forecast Chart -->
+    <div class="card" id="forecastChartCard" style="display:none">
+      <div class="card-title">Forecast Results</div>
+      <div class="chart-container">
+        <canvas id="forecastChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Decomposition Charts -->
+    <div class="card" id="decompChartCard" style="display:none">
+      <div class="card-title">Seasonal Decomposition</div>
+      <div class="chart-container" style="margin-bottom:12px">
+        <canvas id="trendChart"></canvas>
+      </div>
+      <div class="chart-container" style="margin-bottom:12px">
+        <canvas id="seasonalChart"></canvas>
+      </div>
+      <div class="chart-container">
+        <canvas id="residualChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== COMPARE SCREEN ==================== -->
+<div id="screen-compare" class="screen">
+  <div id="compareNoData" class="empty-state">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <p>Run a forecast first to see method comparisons.</p>
+  </div>
+  <div id="compareContent" style="display:none">
+    <div id="bestMethodBanner"></div>
+    <div class="card">
+      <div class="card-title">Accuracy Metrics</div>
+      <div class="table-wrap">
+        <table id="compareTable">
+          <thead><tr><th>Method</th><th>MAE</th><th>MAPE</th><th>RMSE</th><th>Tracking Signal</th><th></th></tr></thead>
+          <tbody id="compareBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">MAPE Comparison</div>
+      <div class="chart-container">
+        <canvas id="compareChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== REPORT SCREEN ==================== -->
+<div id="screen-report" class="screen">
+  <div id="reportNoData" class="empty-state">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <p>Run a forecast first to generate a report.</p>
+  </div>
+  <div id="reportContent" style="display:none">
+    <div class="no-print" style="margin-bottom:16px">
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="window.print()">Print / Save PDF</button>
+        <button class="btn btn-accent" onclick="exportCSV()">Export CSV</button>
+        <button class="btn" onclick="copyForecastTable()">Copy to Clipboard</button>
+      </div>
+    </div>
+
+    <!-- Report Header -->
+    <div class="card" id="reportHeader">
+      <h2 style="margin-bottom:6px">Sales Forecast Report</h2>
+      <p class="text-muted" id="reportDate"></p>
+      <div class="section-divider"></div>
+      <div class="stats-row" id="reportStats"></div>
+    </div>
+
+    <!-- Report Chart -->
+    <div class="card">
+      <div class="card-title">Historical vs Forecast</div>
+      <div class="chart-container">
+        <canvas id="reportChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Forecast Table -->
+    <div class="card">
+      <div class="card-title">Forecast Data</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Period</th><th>Predicted Value</th><th>Lower CI (95%)</th><th>Upper CI (95%)</th></tr></thead>
+          <tbody id="reportForecastBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Accuracy Summary -->
+    <div class="card">
+      <div class="card-title">Accuracy Summary</div>
+      <div id="reportAccuracy"></div>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   STATE
+   ============================================================ */
+let currentData = null;        // { rows: [{date, product, quantity, revenue}], name: string }
+let forecastResults = null;     // { methods: {name: {forecast, fitted, metrics}}, horizon, labels, historicalValues }
+let selectedReportMethod = null;
+let charts = {};                // chart instances
+
+const METHOD_NAMES = {
+  sma: 'Simple Moving Average',
+  wma: 'Weighted Moving Average',
+  ses: 'Exponential Smoothing',
+  lr: 'Linear Regression',
+  holt: "Holt's Double Exp.",
+  hw: 'Holt-Winters',
+  snaive: 'Seasonal Naive',
+  decomp: 'Seasonal Decomposition'
+};
+const METHOD_COLORS = {
+  sma: '#ef4444',
+  wma: '#f59e0b',
+  ses: '#10b981',
+  lr: '#8b5cf6',
+  holt: '#ec4899',
+  hw: '#06b6d4',
+  snaive: '#f97316',
+  decomp: '#6366f1'
+};
+
+/* ============================================================
+   INIT
+   ============================================================ */
+document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
+  initNav();
+  initDropZone();
+  initSliders();
+  initCheckboxes();
+  initManualTable();
+  loadSavedDatasets();
+});
+
+/* ============================================================
+   THEME
+   ============================================================ */
+function initTheme() {
+  const saved = localStorage.getItem('sf-settings');
+  if (saved) {
+    try {
+      const s = JSON.parse(saved);
+      if (s.theme) document.documentElement.setAttribute('data-theme', s.theme);
+    } catch(e) {}
+  }
+  document.getElementById('themeToggle').addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    saveSettings({ theme: next });
+    document.getElementById('themeToggle').textContent = next === 'dark' ? '\u2600' : '\u263D';
+  });
+  const t = document.documentElement.getAttribute('data-theme');
+  document.getElementById('themeToggle').textContent = t === 'dark' ? '\u2600' : '\u263D';
+}
+
+function saveSettings(patch) {
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem('sf-settings') || '{}'); } catch(e) {}
+  Object.assign(s, patch);
+  localStorage.setItem('sf-settings', JSON.stringify(s));
+}
+
+/* ============================================================
+   NAV
+   ============================================================ */
+function initNav() {
+  document.querySelectorAll('.nav-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('screen-' + tab.dataset.screen).classList.add('active');
+      if (tab.dataset.screen === 'forecast') refreshForecastScreen();
+      if (tab.dataset.screen === 'compare') refreshCompareScreen();
+      if (tab.dataset.screen === 'report') refreshReportScreen();
+    });
+  });
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.nav-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.screen === name);
+  });
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+}
+
+/* ============================================================
+   SLIDERS
+   ============================================================ */
+function initSliders() {
+  const pairs = [
+    ['horizon', 'horizonVal', v => v],
+    ['smaWindow', 'smaWindowVal', v => v],
+    ['wmaWindow', 'wmaWindowVal', v => v],
+    ['sesAlpha', 'sesAlphaVal', v => (v / 100).toFixed(2)],
+    ['holtAlpha', 'holtAlphaVal', v => (v / 100).toFixed(2)],
+    ['holtBeta', 'holtBetaVal', v => (v / 100).toFixed(2)],
+    ['hwAlpha', 'hwAlphaVal', v => (v / 100).toFixed(2)],
+    ['hwBeta', 'hwBetaVal', v => (v / 100).toFixed(2)],
+    ['hwGamma', 'hwGammaVal', v => (v / 100).toFixed(2)],
+  ];
+  pairs.forEach(([sliderId, valId, fmt]) => {
+    const slider = document.getElementById(sliderId);
+    const val = document.getElementById(valId);
+    if (!slider || !val) return;
+    slider.addEventListener('input', () => { val.textContent = fmt(slider.value); });
+  });
+}
+
+/* ============================================================
+   CHECKBOXES
+   ============================================================ */
+function initCheckboxes() {
+  document.querySelectorAll('.checkbox-label input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      cb.closest('.checkbox-label').classList.toggle('checked', cb.checked);
+      const params = document.getElementById('params-' + cb.value);
+      if (params) params.classList.toggle('visible', cb.checked);
+    });
+  });
+}
+
+/* ============================================================
+   DROP ZONE & CSV
+   ============================================================ */
+function initDropZone() {
+  const dz = document.getElementById('dropZone');
+  const fi = document.getElementById('csvFileInput');
+
+  dz.addEventListener('click', () => fi.click());
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('dragover');
+    if (e.dataTransfer.files.length) parseCSVFile(e.dataTransfer.files[0]);
+  });
+  fi.addEventListener('change', () => { if (fi.files.length) parseCSVFile(fi.files[0]); });
+}
+
+function parseCSVFile(file) {
+  Papa.parse(file, {
+    header: true,
+    skipEmptyLines: true,
+    complete: (result) => {
+      if (result.errors.length > 3) {
+        showToast('Too many CSV errors. Check your file format.');
+        return;
+      }
+      const rows = mapCSVRows(result.data, result.meta.fields);
+      if (!rows.length) {
+        showToast('No valid rows found. Need at least a Date and Quantity column.');
+        return;
+      }
+      currentData = { rows, name: file.name.replace(/\.csv$/i, '') };
+      showDataPreview();
+      showToast(`Loaded ${rows.length} rows from ${file.name}`);
+    }
+  });
+}
+
+function mapCSVRows(data, fields) {
+  const lower = fields.map(f => f.toLowerCase().trim());
+  const dateIdx = lower.findIndex(f => f.includes('date') || f.includes('period') || f.includes('month') || f.includes('time'));
+  const qtyIdx = lower.findIndex(f => f.includes('qty') || f.includes('quantity') || f.includes('units') || f.includes('sales') || f.includes('demand'));
+  const revIdx = lower.findIndex(f => f.includes('revenue') || f.includes('amount') || f.includes('value') || f.includes('dollar'));
+  const prodIdx = lower.findIndex(f => f.includes('product') || f.includes('sku') || f.includes('item') || f.includes('category'));
+
+  if (dateIdx === -1 || qtyIdx === -1) return [];
+
+  return data.map(row => {
+    const vals = Object.values(row);
+    const q = parseFloat(vals[qtyIdx]);
+    if (isNaN(q)) return null;
+    return {
+      date: vals[dateIdx],
+      product: prodIdx >= 0 ? vals[prodIdx] : 'Product A',
+      quantity: q,
+      revenue: revIdx >= 0 ? parseFloat(vals[revIdx]) || 0 : 0
+    };
+  }).filter(Boolean);
+}
+
+/* ============================================================
+   MANUAL ENTRY
+   ============================================================ */
+function initManualTable() {
+  for (let i = 0; i < 5; i++) addManualRow();
+}
+
+function addManualRow() {
+  const tbody = document.getElementById('manualBody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="date"></td>
+    <td><input type="text" placeholder="Product A"></td>
+    <td><input type="number" placeholder="0"></td>
+    <td><input type="number" placeholder="0"></td>
+    <td><button class="btn btn-sm btn-danger" onclick="this.closest('tr').remove()">&times;</button></td>
+  `;
+  tbody.appendChild(tr);
+}
+
+function loadManualData() {
+  const rows = [];
+  document.querySelectorAll('#manualBody tr').forEach(tr => {
+    const inputs = tr.querySelectorAll('input');
+    const date = inputs[0].value;
+    const qty = parseFloat(inputs[2].value);
+    if (!date || isNaN(qty)) return;
+    rows.push({
+      date: date,
+      product: inputs[1].value || 'Product A',
+      quantity: qty,
+      revenue: parseFloat(inputs[3].value) || 0
+    });
+  });
+  if (!rows.length) { showToast('Enter at least one row with Date and Quantity.'); return; }
+  currentData = { rows, name: 'Manual Entry' };
+  showDataPreview();
+  showToast(`Loaded ${rows.length} rows from manual entry`);
+}
+
+/* ============================================================
+   DUMMY DATA GENERATOR
+   ============================================================ */
+function generateDummyData() {
+  const years = parseInt(document.getElementById('dummyYears').value);
+  const season = document.getElementById('dummySeason').value;
+  const trend = document.getElementById('dummyTrend').value;
+  const noise = document.getElementById('dummyNoise').value;
+  const numProducts = parseInt(document.getElementById('dummyProducts').value);
+
+  const noiseMult = { low: 0.05, medium: 0.12, high: 0.25 }[noise];
+  const trendPerMonth = { up: 2.5, down: -2, flat: 0 }[trend];
+
+  const productNames = ['Widget Alpha', 'Gadget Beta', 'Gizmo Gamma', 'Device Delta', 'Module Epsilon'];
+  const months = years * 12;
+  const rows = [];
+  const startDate = new Date();
+  startDate.setMonth(startDate.getMonth() - months);
+  startDate.setDate(1);
+
+  for (let p = 0; p < numProducts; p++) {
+    const baseQty = 80 + Math.random() * 60;
+    for (let m = 0; m < months; m++) {
+      const d = new Date(startDate);
+      d.setMonth(d.getMonth() + m);
+
+      let seasonal = 0;
+      const mo = d.getMonth();
+      if (season === 'retail') {
+        const seasonalFactors = [0.85, 0.80, 0.90, 0.95, 1.00, 1.05, 1.00, 0.95, 1.05, 1.10, 1.30, 1.50];
+        seasonal = (seasonalFactors[mo] - 1) * baseQty;
+      } else if (season === 'summer') {
+        const seasonalFactors = [0.80, 0.85, 0.95, 1.10, 1.25, 1.40, 1.45, 1.35, 1.10, 0.90, 0.80, 0.75];
+        seasonal = (seasonalFactors[mo] - 1) * baseQty;
+      }
+
+      const trendVal = trendPerMonth * m;
+      const noiseVal = (Math.random() - 0.5) * 2 * noiseMult * baseQty;
+      const qty = Math.max(1, Math.round(baseQty + seasonal + trendVal + noiseVal));
+      const price = 15 + Math.random() * 35;
+
+      rows.push({
+        date: d.toISOString().slice(0, 10),
+        product: productNames[p],
+        quantity: qty,
+        revenue: Math.round(qty * price * 100) / 100
+      });
+    }
+  }
+
+  rows.sort((a, b) => a.date.localeCompare(b.date));
+  currentData = { rows, name: 'Generated Sample' };
+  showDataPreview();
+  showToast(`Generated ${rows.length} rows of sample data`);
+}
+
+/* ============================================================
+   DATA PREVIEW
+   ============================================================ */
+function showDataPreview() {
+  const card = document.getElementById('dataPreviewCard');
+  card.style.display = 'block';
+
+  // Stats
+  const products = [...new Set(currentData.rows.map(r => r.product))];
+  const dates = currentData.rows.map(r => r.date).sort();
+  const totalQty = currentData.rows.reduce((s, r) => s + r.quantity, 0);
+  const totalRev = currentData.rows.reduce((s, r) => s + r.revenue, 0);
+
+  document.getElementById('dataStats').innerHTML = `
+    <div class="stat-card"><div class="stat-value">${currentData.rows.length}</div><div class="stat-label">Total Rows</div></div>
+    <div class="stat-card"><div class="stat-value">${products.length}</div><div class="stat-label">Products</div></div>
+    <div class="stat-card"><div class="stat-value">${dates[0]?.slice(0,7) || '-'}</div><div class="stat-label">Start Date</div></div>
+    <div class="stat-card"><div class="stat-value">${dates[dates.length-1]?.slice(0,7) || '-'}</div><div class="stat-label">End Date</div></div>
+    <div class="stat-card"><div class="stat-value">${totalQty.toLocaleString()}</div><div class="stat-label">Total Quantity</div></div>
+    <div class="stat-card"><div class="stat-value">$${totalRev.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0})}</div><div class="stat-label">Total Revenue</div></div>
+  `;
+
+  // Table
+  const preview = currentData.rows.slice(0, 200);
+  let html = '<table><thead><tr><th>#</th><th>Date</th><th>Product</th><th>Quantity</th><th>Revenue</th></tr></thead><tbody>';
+  preview.forEach((r, i) => {
+    html += `<tr><td>${i+1}</td><td>${r.date}</td><td>${r.product}</td><td>${r.quantity}</td><td>${r.revenue ? '$'+r.revenue.toFixed(2) : '-'}</td></tr>`;
+  });
+  if (currentData.rows.length > 200) html += `<tr><td colspan="5" style="text-align:center;color:var(--text-secondary)">... and ${currentData.rows.length - 200} more rows</td></tr>`;
+  html += '</tbody></table>';
+  document.getElementById('dataPreviewTable').innerHTML = html;
+}
+
+function clearData() {
+  currentData = null;
+  forecastResults = null;
+  document.getElementById('dataPreviewCard').style.display = 'none';
+  showToast('Data cleared');
+}
+
+/* ============================================================
+   SAVED DATASETS
+   ============================================================ */
+function loadSavedDatasets() {
+  const container = document.getElementById('savedDatasets');
+  let datasets = [];
+  try { datasets = JSON.parse(localStorage.getItem('sf-datasets') || '[]'); } catch(e) {}
+  if (!datasets.length) {
+    container.innerHTML = '<span class="text-muted">No saved datasets yet.</span>';
+    return;
+  }
+  container.innerHTML = datasets.map((ds, i) => `
+    <div class="dataset-chip" onclick="loadDataset(${i})">
+      ${ds.name} (${ds.rows.length} rows)
+      <span class="del" onclick="event.stopPropagation();deleteDataset(${i})">&times;</span>
+    </div>
+  `).join('');
+}
+
+function saveDataset() {
+  if (!currentData) return;
+  let datasets = [];
+  try { datasets = JSON.parse(localStorage.getItem('sf-datasets') || '[]'); } catch(e) {}
+  const name = prompt('Dataset name:', currentData.name || 'My Dataset');
+  if (!name) return;
+  datasets.push({ name, rows: currentData.rows, createdAt: new Date().toISOString() });
+  localStorage.setItem('sf-datasets', JSON.stringify(datasets));
+  loadSavedDatasets();
+  showToast('Dataset saved');
+}
+
+function loadDataset(index) {
+  let datasets = [];
+  try { datasets = JSON.parse(localStorage.getItem('sf-datasets') || '[]'); } catch(e) {}
+  if (!datasets[index]) return;
+  currentData = { rows: datasets[index].rows, name: datasets[index].name };
+  showDataPreview();
+  showToast(`Loaded "${datasets[index].name}"`);
+}
+
+function deleteDataset(index) {
+  let datasets = [];
+  try { datasets = JSON.parse(localStorage.getItem('sf-datasets') || '[]'); } catch(e) {}
+  datasets.splice(index, 1);
+  localStorage.setItem('sf-datasets', JSON.stringify(datasets));
+  loadSavedDatasets();
+  showToast('Dataset deleted');
+}
+
+/* ============================================================
+   FORECAST SCREEN REFRESH
+   ============================================================ */
+function refreshForecastScreen() {
+  const hasData = currentData && currentData.rows.length > 0;
+  document.getElementById('forecastNoData').style.display = hasData ? 'none' : 'block';
+  document.getElementById('forecastContent').style.display = hasData ? 'block' : 'none';
+  if (hasData) {
+    const sel = document.getElementById('productFilter');
+    const products = [...new Set(currentData.rows.map(r => r.product))];
+    sel.innerHTML = '<option value="__all__">All Products (aggregated)</option>';
+    products.forEach(p => { sel.innerHTML += `<option value="${p}">${p}</option>`; });
+  }
+}
+
+/* ============================================================
+   PREPARE TIME SERIES
+   ============================================================ */
+function prepareTimeSeries(productFilter) {
+  let rows = currentData.rows;
+  if (productFilter && productFilter !== '__all__') {
+    rows = rows.filter(r => r.product === productFilter);
+  }
+
+  // Group by month
+  const monthly = {};
+  rows.forEach(r => {
+    const key = r.date.slice(0, 7); // YYYY-MM
+    if (!monthly[key]) monthly[key] = 0;
+    monthly[key] += r.quantity;
+  });
+
+  const labels = Object.keys(monthly).sort();
+  const values = labels.map(k => monthly[k]);
+  return { labels, values };
+}
+
+/* ============================================================
+   FORECASTING METHODS
+   ============================================================ */
+
+// 1. Simple Moving Average
+function forecastSMA(values, horizon, window) {
+  const n = values.length;
+  const fitted = new Array(n).fill(null);
+  for (let i = window; i < n; i++) {
+    let sum = 0;
+    for (let j = i - window; j < i; j++) sum += values[j];
+    fitted[i] = sum / window;
+  }
+  const forecast = [];
+  const extended = [...values];
+  for (let h = 0; h < horizon; h++) {
+    let sum = 0;
+    for (let j = extended.length - window; j < extended.length; j++) sum += extended[j];
+    const val = sum / window;
+    forecast.push(val);
+    extended.push(val);
+  }
+  return { fitted, forecast };
+}
+
+// 2. Weighted Moving Average
+function forecastWMA(values, horizon, window) {
+  const n = values.length;
+  const weights = [];
+  let wSum = 0;
+  for (let i = 1; i <= window; i++) { weights.push(i); wSum += i; }
+
+  const fitted = new Array(n).fill(null);
+  for (let i = window; i < n; i++) {
+    let sum = 0;
+    for (let j = 0; j < window; j++) sum += values[i - window + j] * weights[j];
+    fitted[i] = sum / wSum;
+  }
+
+  const forecast = [];
+  const extended = [...values];
+  for (let h = 0; h < horizon; h++) {
+    let sum = 0;
+    for (let j = 0; j < window; j++) sum += extended[extended.length - window + j] * weights[j];
+    const val = sum / wSum;
+    forecast.push(val);
+    extended.push(val);
+  }
+  return { fitted, forecast };
+}
+
+// 3. Single Exponential Smoothing
+function forecastSES(values, horizon, alpha) {
+  const n = values.length;
+  const fitted = new Array(n).fill(null);
+  fitted[0] = values[0];
+  for (let i = 1; i < n; i++) {
+    fitted[i] = alpha * values[i - 1] + (1 - alpha) * fitted[i - 1];
+  }
+  const lastLevel = alpha * values[n - 1] + (1 - alpha) * fitted[n - 1];
+  const forecast = new Array(horizon).fill(lastLevel);
+  return { fitted, forecast };
+}
+
+// 4. Linear Regression
+function forecastLR(values, horizon) {
+  const n = values.length;
+  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+  for (let i = 0; i < n; i++) {
+    sumX += i; sumY += values[i];
+    sumXY += i * values[i]; sumX2 += i * i;
+  }
+  const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / n;
+
+  const fitted = values.map((_, i) => intercept + slope * i);
+  const forecast = [];
+  for (let h = 0; h < horizon; h++) {
+    forecast.push(intercept + slope * (n + h));
+  }
+  return { fitted, forecast, slope, intercept };
+}
+
+// 5. Holt's Double Exponential Smoothing
+function forecastHolt(values, horizon, alpha, beta) {
+  const n = values.length;
+  let level = values[0];
+  let trendVal = values.length > 1 ? values[1] - values[0] : 0;
+  const fitted = [level];
+
+  for (let i = 1; i < n; i++) {
+    const newLevel = alpha * values[i] + (1 - alpha) * (level + trendVal);
+    const newTrend = beta * (newLevel - level) + (1 - beta) * trendVal;
+    level = newLevel;
+    trendVal = newTrend;
+    fitted.push(level + trendVal);
+  }
+
+  const forecast = [];
+  for (let h = 1; h <= horizon; h++) {
+    forecast.push(level + h * trendVal);
+  }
+  return { fitted, forecast };
+}
+
+// 6. Holt-Winters Triple Exponential Smoothing
+function forecastHW(values, horizon, alpha, beta, gamma, period, variant) {
+  const n = values.length;
+  if (n < period * 2) {
+    // Fallback to Holt's if not enough data
+    return forecastHolt(values, horizon, alpha, beta);
+  }
+
+  const isAdd = variant === 'additive';
+
+  // Initialize seasonal component
+  const seasonal = new Array(n + horizon).fill(0);
+  let level, trendVal;
+
+  // Initial level and trend from first season
+  let firstSeasonAvg = 0;
+  for (let i = 0; i < period; i++) firstSeasonAvg += values[i];
+  firstSeasonAvg /= period;
+
+  let secondSeasonAvg = 0;
+  for (let i = period; i < period * 2; i++) secondSeasonAvg += values[i];
+  secondSeasonAvg /= period;
+
+  level = firstSeasonAvg;
+  trendVal = (secondSeasonAvg - firstSeasonAvg) / period;
+
+  // Initial seasonal indices
+  for (let i = 0; i < period; i++) {
+    if (isAdd) {
+      seasonal[i] = values[i] - firstSeasonAvg;
+    } else {
+      seasonal[i] = firstSeasonAvg > 0 ? values[i] / firstSeasonAvg : 1;
+    }
+  }
+
+  const fitted = new Array(n).fill(null);
+  fitted[0] = isAdd ? level + trendVal + seasonal[0] : (level + trendVal) * seasonal[0];
+
+  for (let i = 1; i < n; i++) {
+    const prevSeasonal = seasonal[i % period >= 0 ? i % period : i];
+    if (isAdd) {
+      const newLevel = alpha * (values[i] - seasonal[i % period]) + (1 - alpha) * (level + trendVal);
+      const newTrend = beta * (newLevel - level) + (1 - beta) * trendVal;
+      seasonal[i + period] = gamma * (values[i] - newLevel) + (1 - gamma) * seasonal[i % period];
+      level = newLevel;
+      trendVal = newTrend;
+      fitted[i] = level + trendVal + seasonal[i % period];
+    } else {
+      const s = seasonal[i % period] || 1;
+      const newLevel = alpha * (values[i] / s) + (1 - alpha) * (level + trendVal);
+      const newTrend = beta * (newLevel - level) + (1 - beta) * trendVal;
+      seasonal[i + period] = gamma * (values[i] / newLevel) + (1 - gamma) * s;
+      level = newLevel;
+      trendVal = newTrend;
+      fitted[i] = (level + trendVal) * s;
+    }
+  }
+
+  const forecast = [];
+  for (let h = 1; h <= horizon; h++) {
+    const sIdx = ((n + h - 1) % period) + n - (n % period);
+    const s = seasonal[sIdx] || (isAdd ? 0 : 1);
+    if (isAdd) {
+      forecast.push(level + h * trendVal + s);
+    } else {
+      forecast.push((level + h * trendVal) * s);
+    }
+  }
+
+  return { fitted, forecast };
+}
+
+// 7. Seasonal Naive
+function forecastSNaive(values, horizon, period) {
+  const n = values.length;
+  const fitted = new Array(n).fill(null);
+  for (let i = period; i < n; i++) {
+    fitted[i] = values[i - period];
+  }
+  const forecast = [];
+  for (let h = 0; h < horizon; h++) {
+    const idx = n - period + (h % period);
+    forecast.push(idx >= 0 ? values[idx] : values[values.length - 1]);
+  }
+  return { fitted, forecast };
+}
+
+// 8. Seasonal Decomposition
+function forecastDecomp(values, horizon, period) {
+  const n = values.length;
+
+  // Compute trend via centered moving average
+  const trendComp = new Array(n).fill(null);
+  const half = Math.floor(period / 2);
+  for (let i = half; i < n - half; i++) {
+    let sum = 0;
+    for (let j = i - half; j <= i + half; j++) sum += values[j];
+    if (period % 2 === 0) {
+      sum -= (values[i - half] + values[i + half]) / 2;
+      trendComp[i] = sum / period;
+    } else {
+      trendComp[i] = sum / period;
+    }
+  }
+
+  // Fill edges of trend
+  let firstValid = trendComp.findIndex(v => v !== null);
+  let lastValid = n - 1;
+  while (lastValid >= 0 && trendComp[lastValid] === null) lastValid--;
+  for (let i = 0; i < firstValid; i++) trendComp[i] = trendComp[firstValid];
+  for (let i = lastValid + 1; i < n; i++) trendComp[i] = trendComp[lastValid];
+
+  // Seasonal component
+  const seasonalComp = new Array(n).fill(0);
+  const detrended = values.map((v, i) => v - trendComp[i]);
+  const seasonalAvg = new Array(period).fill(0);
+  const seasonalCount = new Array(period).fill(0);
+  for (let i = 0; i < n; i++) {
+    seasonalAvg[i % period] += detrended[i];
+    seasonalCount[i % period]++;
+  }
+  for (let j = 0; j < period; j++) seasonalAvg[j] /= seasonalCount[j];
+  // Center seasonal
+  const sAvg = seasonalAvg.reduce((a, b) => a + b, 0) / period;
+  for (let j = 0; j < period; j++) seasonalAvg[j] -= sAvg;
+  for (let i = 0; i < n; i++) seasonalComp[i] = seasonalAvg[i % period];
+
+  // Residual
+  const residualComp = values.map((v, i) => v - trendComp[i] - seasonalComp[i]);
+
+  // Forecast: extrapolate trend linearly + seasonal
+  const trendSlope = (trendComp[lastValid] - trendComp[firstValid]) / (lastValid - firstValid);
+  const fitted = values.map((_, i) => trendComp[i] + seasonalComp[i]);
+  const forecast = [];
+  for (let h = 0; h < horizon; h++) {
+    const t = trendComp[n - 1] + trendSlope * (h + 1);
+    const s = seasonalAvg[(n + h) % period];
+    forecast.push(t + s);
+  }
+
+  return { fitted, forecast, trendComp, seasonalComp, residualComp };
+}
+
+/* ============================================================
+   ACCURACY METRICS
+   ============================================================ */
+function computeMetrics(actual, fitted) {
+  let mae = 0, mape = 0, rmse = 0, sumError = 0, sumAbsError = 0;
+  let count = 0;
+  for (let i = 0; i < actual.length; i++) {
+    if (fitted[i] === null || fitted[i] === undefined) continue;
+    const err = actual[i] - fitted[i];
+    const absErr = Math.abs(err);
+    mae += absErr;
+    if (actual[i] !== 0) mape += absErr / Math.abs(actual[i]);
+    rmse += err * err;
+    sumError += err;
+    sumAbsError += absErr;
+    count++;
+  }
+  if (count === 0) return { mae: 0, mape: 0, rmse: 0, trackingSignal: 0 };
+  mae /= count;
+  mape = (mape / count) * 100;
+  rmse = Math.sqrt(rmse / count);
+  const mad = sumAbsError / count;
+  const trackingSignal = mad > 0 ? sumError / mad : 0;
+  return { mae, mape, rmse, trackingSignal };
+}
+
+/* ============================================================
+   RUN FORECAST
+   ============================================================ */
+function runForecast() {
+  if (!currentData) return;
+
+  const productFilter = document.getElementById('productFilter').value;
+  const { labels, values } = prepareTimeSeries(productFilter);
+  if (values.length < 4) {
+    showToast('Need at least 4 data points to forecast.');
+    return;
+  }
+
+  const horizon = parseInt(document.getElementById('horizon').value);
+  const methods = {};
+  const selectedMethods = [];
+  document.querySelectorAll('#methodCheckboxes input:checked').forEach(cb => selectedMethods.push(cb.value));
+
+  if (!selectedMethods.length) { showToast('Select at least one method.'); return; }
+
+  // Run selected methods
+  if (selectedMethods.includes('sma')) {
+    const w = parseInt(document.getElementById('smaWindow').value);
+    methods.sma = { ...forecastSMA(values, horizon, w), params: { window: w } };
+  }
+  if (selectedMethods.includes('wma')) {
+    const w = parseInt(document.getElementById('wmaWindow').value);
+    methods.wma = { ...forecastWMA(values, horizon, w), params: { window: w } };
+  }
+  if (selectedMethods.includes('ses')) {
+    const alpha = parseInt(document.getElementById('sesAlpha').value) / 100;
+    methods.ses = { ...forecastSES(values, horizon, alpha), params: { alpha } };
+  }
+  if (selectedMethods.includes('lr')) {
+    methods.lr = { ...forecastLR(values, horizon), params: {} };
+  }
+  if (selectedMethods.includes('holt')) {
+    const a = parseInt(document.getElementById('holtAlpha').value) / 100;
+    const b = parseInt(document.getElementById('holtBeta').value) / 100;
+    methods.holt = { ...forecastHolt(values, horizon, a, b), params: { alpha: a, beta: b } };
+  }
+  if (selectedMethods.includes('hw')) {
+    const a = parseInt(document.getElementById('hwAlpha').value) / 100;
+    const b = parseInt(document.getElementById('hwBeta').value) / 100;
+    const g = parseInt(document.getElementById('hwGamma').value) / 100;
+    const p = parseInt(document.getElementById('hwPeriod').value);
+    const v = document.getElementById('hwVariant').value;
+    methods.hw = { ...forecastHW(values, horizon, a, b, g, p, v), params: { alpha: a, beta: b, gamma: g, period: p, variant: v } };
+  }
+  if (selectedMethods.includes('snaive')) {
+    const p = parseInt(document.getElementById('snaivePeriod').value);
+    methods.snaive = { ...forecastSNaive(values, horizon, p), params: { period: p } };
+  }
+  if (selectedMethods.includes('decomp')) {
+    const p = parseInt(document.getElementById('decompPeriod').value);
+    methods.decomp = { ...forecastDecomp(values, horizon, p), params: { period: p } };
+  }
+
+  // Compute metrics
+  Object.keys(methods).forEach(key => {
+    methods[key].metrics = computeMetrics(values, methods[key].fitted);
+  });
+
+  // Generate forecast labels
+  const lastDate = labels[labels.length - 1];
+  const forecastLabels = [];
+  const [y, m] = lastDate.split('-').map(Number);
+  for (let h = 1; h <= horizon; h++) {
+    const nd = new Date(y, m - 1 + h, 1);
+    forecastLabels.push(nd.toISOString().slice(0, 7));
+  }
+
+  forecastResults = {
+    methods,
+    horizon,
+    labels,
+    forecastLabels,
+    historicalValues: values,
+    productFilter
+  };
+
+  // Find best method
+  let bestKey = null, bestMAPE = Infinity;
+  Object.entries(methods).forEach(([key, m]) => {
+    if (m.metrics.mape < bestMAPE) { bestMAPE = m.metrics.mape; bestKey = key; }
+  });
+  selectedReportMethod = bestKey;
+
+  // Save last forecast
+  try { localStorage.setItem('sf-last-forecast', JSON.stringify({ timestamp: Date.now() })); } catch(e) {}
+
+  renderForecastChart();
+  if (methods.decomp) renderDecompCharts(values, labels, methods.decomp);
+  showToast('Forecast complete!');
+}
+
+/* ============================================================
+   RENDER FORECAST CHART
+   ============================================================ */
+function renderForecastChart() {
+  if (!forecastResults) return;
+  document.getElementById('forecastChartCard').style.display = 'block';
+
+  const { labels, forecastLabels, historicalValues, methods } = forecastResults;
+  const allLabels = [...labels, ...forecastLabels];
+
+  const datasets = [{
+    label: 'Historical',
+    data: [...historicalValues, ...new Array(forecastLabels.length).fill(null)],
+    borderColor: '#3b82f6',
+    backgroundColor: 'rgba(59,130,246,0.08)',
+    borderWidth: 2,
+    pointRadius: 2,
+    fill: true,
+    tension: 0.3
+  }];
+
+  // Add confidence band for best method
+  const bestMethod = methods[selectedReportMethod];
+  if (bestMethod) {
+    const residuals = [];
+    for (let i = 0; i < historicalValues.length; i++) {
+      if (bestMethod.fitted[i] !== null) residuals.push(historicalValues[i] - bestMethod.fitted[i]);
+    }
+    const std = Math.sqrt(residuals.reduce((s, r) => s + r * r, 0) / residuals.length) || 1;
+
+    const upperCI = [...new Array(labels.length).fill(null), ...bestMethod.forecast.map((v, h) => v + 1.96 * std * Math.sqrt(1 + h * 0.1))];
+    const lowerCI = [...new Array(labels.length).fill(null), ...bestMethod.forecast.map((v, h) => Math.max(0, v - 1.96 * std * Math.sqrt(1 + h * 0.1)))];
+
+    datasets.push({
+      label: 'Upper CI (95%)',
+      data: upperCI,
+      borderColor: 'transparent',
+      backgroundColor: 'rgba(59,130,246,0.1)',
+      fill: '+1',
+      pointRadius: 0,
+    });
+    datasets.push({
+      label: 'Lower CI (95%)',
+      data: lowerCI,
+      borderColor: 'transparent',
+      backgroundColor: 'transparent',
+      fill: false,
+      pointRadius: 0,
+    });
+  }
+
+  // Add each method forecast line
+  Object.entries(methods).forEach(([key, m]) => {
+    if (key === 'decomp' && methods.decomp) {
+      // For decomp, show fitted + forecast but don't clutter
+    }
+    const combined = [...m.fitted, ...m.forecast];
+    datasets.push({
+      label: METHOD_NAMES[key],
+      data: combined.map((v, i) => i < labels.length && v === null ? null : v),
+      borderColor: METHOD_COLORS[key],
+      borderWidth: 2,
+      pointRadius: 0,
+      borderDash: [],
+      tension: 0.3,
+      fill: false,
+      // Dash the forecast portion
+      segment: {
+        borderDash: ctx => ctx.p0DataIndex >= labels.length - 1 ? [5, 5] : undefined,
+      }
+    });
+  });
+
+  if (charts.forecast) charts.forecast.destroy();
+  const ctx = document.getElementById('forecastChart').getContext('2d');
+  charts.forecast = new Chart(ctx, {
+    type: 'line',
+    data: { labels: allLabels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16 } },
+        tooltip: {
+          callbacks: {
+            label: item => `${item.dataset.label}: ${item.raw !== null ? Math.round(item.raw).toLocaleString() : '-'}`
+          }
+        }
+      },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: false, grid: { color: 'rgba(0,0,0,0.05)' } }
+      }
+    }
+  });
+}
+
+/* ============================================================
+   RENDER DECOMPOSITION CHARTS
+   ============================================================ */
+function renderDecompCharts(values, labels, decomp) {
+  document.getElementById('decompChartCard').style.display = 'block';
+
+  const makeChart = (canvasId, label, data, color) => {
+    if (charts[canvasId]) charts[canvasId].destroy();
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    charts[canvasId] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{ label, data, borderColor: color, borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.3 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: true, position: 'top' } },
+        scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(0,0,0,0.05)' } } }
+      }
+    });
+  };
+
+  makeChart('trendChart', 'Trend Component', decomp.trendComp, '#8b5cf6');
+  makeChart('seasonalChart', 'Seasonal Component', decomp.seasonalComp, '#06b6d4');
+  makeChart('residualChart', 'Residual Component', decomp.residualComp, '#f59e0b');
+}
+
+/* ============================================================
+   COMPARE SCREEN
+   ============================================================ */
+function refreshCompareScreen() {
+  const hasResults = forecastResults && Object.keys(forecastResults.methods).length > 0;
+  document.getElementById('compareNoData').style.display = hasResults ? 'none' : 'block';
+  document.getElementById('compareContent').style.display = hasResults ? 'block' : 'none';
+  if (hasResults) renderComparison();
+}
+
+function renderComparison() {
+  const { methods } = forecastResults;
+  const entries = Object.entries(methods).sort((a, b) => a[1].metrics.mape - b[1].metrics.mape);
+  const bestKey = entries[0][0];
+
+  // Best method banner
+  document.getElementById('bestMethodBanner').innerHTML = `
+    <div class="best-method">
+      <div class="trophy">&#127942;</div>
+      <div>
+        <h3>Best Method: ${METHOD_NAMES[bestKey]}</h3>
+        <p>MAPE: ${entries[0][1].metrics.mape.toFixed(2)}% | MAE: ${entries[0][1].metrics.mae.toFixed(1)} | RMSE: ${entries[0][1].metrics.rmse.toFixed(1)}</p>
+      </div>
+    </div>
+  `;
+
+  // Table
+  const tbody = document.getElementById('compareBody');
+  tbody.innerHTML = entries.map(([key, m]) => `
+    <tr style="${key === bestKey ? 'background:rgba(16,185,129,0.08)' : ''}">
+      <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${METHOD_COLORS[key]};margin-right:6px"></span>${METHOD_NAMES[key]}</td>
+      <td>${m.metrics.mae.toFixed(2)}</td>
+      <td>${m.metrics.mape.toFixed(2)}%</td>
+      <td>${m.metrics.rmse.toFixed(2)}</td>
+      <td>${m.metrics.trackingSignal.toFixed(2)}</td>
+      <td><button class="btn btn-sm ${key === selectedReportMethod ? 'btn-primary' : ''}" onclick="selectReportMethod('${key}')">
+        ${key === selectedReportMethod ? 'Selected' : 'Use for Report'}
+      </button></td>
+    </tr>
+  `).join('');
+
+  // MAPE Bar Chart
+  if (charts.compare) charts.compare.destroy();
+  const ctx = document.getElementById('compareChart').getContext('2d');
+  charts.compare = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: entries.map(([k]) => METHOD_NAMES[k]),
+      datasets: [{
+        label: 'MAPE (%)',
+        data: entries.map(([, m]) => m.metrics.mape),
+        backgroundColor: entries.map(([k]) => METHOD_COLORS[k]),
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, title: { display: true, text: 'MAPE (%)' }, grid: { color: 'rgba(0,0,0,0.05)' } }
+      }
+    }
+  });
+}
+
+function selectReportMethod(key) {
+  selectedReportMethod = key;
+  renderComparison();
+  showToast(`${METHOD_NAMES[key]} selected for report`);
+}
+
+/* ============================================================
+   REPORT SCREEN
+   ============================================================ */
+function refreshReportScreen() {
+  const hasResults = forecastResults && selectedReportMethod;
+  document.getElementById('reportNoData').style.display = hasResults ? 'none' : 'block';
+  document.getElementById('reportContent').style.display = hasResults ? 'block' : 'none';
+  if (hasResults) renderReport();
+}
+
+function renderReport() {
+  const { methods, labels, forecastLabels, historicalValues } = forecastResults;
+  const method = methods[selectedReportMethod];
+  if (!method) return;
+
+  // Header
+  document.getElementById('reportDate').textContent = `Generated: ${new Date().toLocaleDateString()} | Dataset: ${currentData?.name || 'Unknown'} | Method: ${METHOD_NAMES[selectedReportMethod]}`;
+
+  // Stats
+  const totalHist = historicalValues.reduce((a, b) => a + b, 0);
+  const totalForecast = method.forecast.reduce((a, b) => a + b, 0);
+  const avgHist = totalHist / historicalValues.length;
+  const avgForecast = totalForecast / method.forecast.length;
+
+  document.getElementById('reportStats').innerHTML = `
+    <div class="stat-card"><div class="stat-value">${historicalValues.length}</div><div class="stat-label">Historical Periods</div></div>
+    <div class="stat-card"><div class="stat-value">${method.forecast.length}</div><div class="stat-label">Forecast Periods</div></div>
+    <div class="stat-card"><div class="stat-value">${Math.round(avgHist).toLocaleString()}</div><div class="stat-label">Avg Historical</div></div>
+    <div class="stat-card"><div class="stat-value">${Math.round(avgForecast).toLocaleString()}</div><div class="stat-label">Avg Forecast</div></div>
+    <div class="stat-card"><div class="stat-value">${method.metrics.mape.toFixed(1)}%</div><div class="stat-label">MAPE</div></div>
+  `;
+
+  // Chart
+  const residuals = [];
+  for (let i = 0; i < historicalValues.length; i++) {
+    if (method.fitted[i] !== null) residuals.push(historicalValues[i] - method.fitted[i]);
+  }
+  const std = Math.sqrt(residuals.reduce((s, r) => s + r * r, 0) / residuals.length) || 1;
+
+  const allLabels = [...labels, ...forecastLabels];
+  if (charts.report) charts.report.destroy();
+  const ctx = document.getElementById('reportChart').getContext('2d');
+  charts.report = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: allLabels,
+      datasets: [
+        {
+          label: 'Historical',
+          data: [...historicalValues, ...new Array(forecastLabels.length).fill(null)],
+          borderColor: '#3b82f6', borderWidth: 2, pointRadius: 2, fill: false, tension: 0.3
+        },
+        {
+          label: METHOD_NAMES[selectedReportMethod] + ' (Forecast)',
+          data: [...new Array(labels.length - 1).fill(null), historicalValues[historicalValues.length - 1], ...method.forecast],
+          borderColor: METHOD_COLORS[selectedReportMethod], borderWidth: 2.5, borderDash: [5,5],
+          pointRadius: 3, fill: false, tension: 0.3
+        },
+        {
+          label: 'Upper CI (95%)',
+          data: [...new Array(labels.length).fill(null), ...method.forecast.map((v, h) => v + 1.96 * std * Math.sqrt(1 + h * 0.1))],
+          borderColor: 'transparent', backgroundColor: 'rgba(59,130,246,0.1)',
+          fill: '+1', pointRadius: 0
+        },
+        {
+          label: 'Lower CI (95%)',
+          data: [...new Array(labels.length).fill(null), ...method.forecast.map((v, h) => Math.max(0, v - 1.96 * std * Math.sqrt(1 + h * 0.1)))],
+          borderColor: 'transparent', backgroundColor: 'transparent',
+          fill: false, pointRadius: 0
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { usePointStyle: true } } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: false, grid: { color: 'rgba(0,0,0,0.05)' } }
+      }
+    }
+  });
+
+  // Forecast table
+  const tbody = document.getElementById('reportForecastBody');
+  tbody.innerHTML = method.forecast.map((v, i) => {
+    const upper = v + 1.96 * std * Math.sqrt(1 + i * 0.1);
+    const lower = Math.max(0, v - 1.96 * std * Math.sqrt(1 + i * 0.1));
+    return `<tr>
+      <td>${forecastLabels[i]}</td>
+      <td>${Math.round(v).toLocaleString()}</td>
+      <td>${Math.round(lower).toLocaleString()}</td>
+      <td>${Math.round(upper).toLocaleString()}</td>
+    </tr>`;
+  }).join('');
+
+  // Accuracy
+  document.getElementById('reportAccuracy').innerHTML = `
+    <div class="form-row" style="gap:20px">
+      <div><strong>Method:</strong> ${METHOD_NAMES[selectedReportMethod]}</div>
+      <div><strong>MAE:</strong> ${method.metrics.mae.toFixed(2)}</div>
+      <div><strong>MAPE:</strong> ${method.metrics.mape.toFixed(2)}%</div>
+      <div><strong>RMSE:</strong> ${method.metrics.rmse.toFixed(2)}</div>
+      <div><strong>Tracking Signal:</strong> ${method.metrics.trackingSignal.toFixed(2)}</div>
+    </div>
+    <div class="mt-12 text-muted">
+      ${method.params ? 'Parameters: ' + Object.entries(method.params).map(([k,v]) => `${k}=${v}`).join(', ') : ''}
+    </div>
+  `;
+}
+
+/* ============================================================
+   EXPORT
+   ============================================================ */
+function exportCSV() {
+  if (!forecastResults || !selectedReportMethod) return;
+  const { methods, labels, forecastLabels, historicalValues } = forecastResults;
+  const method = methods[selectedReportMethod];
+  const residuals = [];
+  for (let i = 0; i < historicalValues.length; i++) {
+    if (method.fitted[i] !== null) residuals.push(historicalValues[i] - method.fitted[i]);
+  }
+  const std = Math.sqrt(residuals.reduce((s, r) => s + r * r, 0) / residuals.length) || 1;
+
+  let csv = 'Period,Type,Value,Lower_CI_95,Upper_CI_95\n';
+  labels.forEach((l, i) => {
+    csv += `${l},Historical,${historicalValues[i]},,\n`;
+  });
+  method.forecast.forEach((v, i) => {
+    const upper = v + 1.96 * std * Math.sqrt(1 + i * 0.1);
+    const lower = Math.max(0, v - 1.96 * std * Math.sqrt(1 + i * 0.1));
+    csv += `${forecastLabels[i]},Forecast,${Math.round(v)},${Math.round(lower)},${Math.round(upper)}\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `forecast_${selectedReportMethod}_${Date.now()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('CSV exported');
+}
+
+function copyForecastTable() {
+  if (!forecastResults || !selectedReportMethod) return;
+  const { methods, forecastLabels } = forecastResults;
+  const method = methods[selectedReportMethod];
+  const historicalValues = forecastResults.historicalValues;
+  const residuals = [];
+  for (let i = 0; i < historicalValues.length; i++) {
+    if (method.fitted[i] !== null) residuals.push(historicalValues[i] - method.fitted[i]);
+  }
+  const std = Math.sqrt(residuals.reduce((s, r) => s + r * r, 0) / residuals.length) || 1;
+
+  let text = 'Period\tPredicted\tLower CI\tUpper CI\n';
+  method.forecast.forEach((v, i) => {
+    const upper = v + 1.96 * std * Math.sqrt(1 + i * 0.1);
+    const lower = Math.max(0, v - 1.96 * std * Math.sqrt(1 + i * 0.1));
+    text += `${forecastLabels[i]}\t${Math.round(v)}\t${Math.round(lower)}\t${Math.round(upper)}\n`;
+  });
+
+  navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard'));
+}
+
+/* ============================================================
+   TOAST
+   ============================================================ */
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
