@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sales Forecast Pro</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js" integrity="sha384-D/t0ZMqQW31H3az8ktEiNb39wyKnS82iFY52QPACM+IjKW3jDUhyIgh2PApRqJZs" crossorigin="anonymous"></script>
 <style>
 /* ===== CSS Reset & Variables ===== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1105,7 +1105,11 @@ function loadDataset(index) {
   let datasets = [];
   try { datasets = JSON.parse(localStorage.getItem('sf-datasets') || '[]'); } catch(e) {}
   if (!datasets[index]) return;
-  currentData = { rows: datasets[index].rows, name: datasets[index].name };
+  // Datasets saved by older versions may hold dates in other formats: normalise them
+  const rows = datasets[index].rows
+    .map(r => ({ ...r, date: normalizeDate(r.date) }))
+    .filter(r => r.date && Number.isFinite(r.quantity));
+  currentData = { rows, name: datasets[index].name };
   showDataPreview();
   showToast(`Loaded "${datasets[index].name}"`);
 }
@@ -1489,13 +1493,18 @@ function runForecast() {
   if (!selectedMethods.length) { showToast('Select at least one method.'); return; }
 
   // Run selected methods
+  const skipped = [];
   if (selectedMethods.includes('sma')) {
     const w = parseInt(document.getElementById('smaWindow').value);
-    methods.sma = { ...forecastSMA(values, horizon, w), params: { window: w } };
+    if (values.length > w) {
+      methods.sma = { ...forecastSMA(values, horizon, w), params: { window: w } };
+    } else skipped.push(`${METHOD_NAMES.sma} (window ${w} needs ${w + 1}+ months)`);
   }
   if (selectedMethods.includes('wma')) {
     const w = parseInt(document.getElementById('wmaWindow').value);
-    methods.wma = { ...forecastWMA(values, horizon, w), params: { window: w } };
+    if (values.length > w) {
+      methods.wma = { ...forecastWMA(values, horizon, w), params: { window: w } };
+    } else skipped.push(`${METHOD_NAMES.wma} (window ${w} needs ${w + 1}+ months)`);
   }
   if (selectedMethods.includes('ses')) {
     const alpha = parseInt(document.getElementById('sesAlpha').value) / 100;
@@ -1509,7 +1518,6 @@ function runForecast() {
     const b = parseInt(document.getElementById('holtBeta').value) / 100;
     methods.holt = { ...forecastHolt(values, horizon, a, b), params: { alpha: a, beta: b } };
   }
-  const skipped = [];
   if (selectedMethods.includes('hw')) {
     const a = parseInt(document.getElementById('hwAlpha').value) / 100;
     const b = parseInt(document.getElementById('hwBeta').value) / 100;
@@ -1536,6 +1544,9 @@ function runForecast() {
     showToast(`Not enough data for the selected methods: ${skipped.join(', ')}`);
     return;
   }
+
+  // Demand can't be negative: a falling trend line is floored at 0
+  Object.values(methods).forEach(m => { m.forecast = m.forecast.map(v => Math.max(0, v)); });
 
   // Score every method on the SAME months, using honest one-step-ahead forecasts.
   // The window starts where the slowest method can first make a prediction.
