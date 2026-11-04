@@ -689,7 +689,7 @@ input[type="range"]::-webkit-slider-thumb {
       <div class="card-title">Forecast Data</div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Period</th><th>Predicted Value</th><th>Lower CI (95%)</th><th>Upper CI (95%)</th></tr></thead>
+          <thead><tr><th>Period</th><th>Predicted Value</th><th>Lower 95% (approx.)</th><th>Upper 95% (approx.)</th></tr></thead>
           <tbody id="reportForecastBody"></tbody>
         </table>
       </div>
@@ -888,16 +888,52 @@ function mapCSVRows(data, fields) {
   if (dateIdx === -1 || qtyIdx === -1) return [];
 
   return data.map(row => {
-    const vals = Object.values(row);
-    const q = parseFloat(vals[qtyIdx]);
-    if (isNaN(q)) return null;
+    const get = idx => row[fields[idx]];
+    const q = parseFloat(get(qtyIdx));
+    const date = normalizeDate(get(dateIdx));
+    if (isNaN(q) || !date) return null;
     return {
-      date: vals[dateIdx],
-      product: prodIdx >= 0 ? vals[prodIdx] : 'Product A',
+      date,
+      product: prodIdx >= 0 && String(get(prodIdx) ?? '').trim() ? String(get(prodIdx)).trim() : 'Product A',
       quantity: q,
-      revenue: revIdx >= 0 ? parseFloat(vals[revIdx]) || 0 : 0
+      revenue: revIdx >= 0 ? parseFloat(get(revIdx)) || 0 : 0
     };
   }).filter(Boolean);
+}
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+// "YYYY-MM" plus k months, using plain arithmetic (no timezones involved)
+function addMonthsYM(ym, k) {
+  const [y, m] = ym.split('-').map(Number);
+  const t = y * 12 + (m - 1) + k;
+  return `${Math.floor(t / 12)}-${pad2((t % 12) + 1)}`;
+}
+
+// Accepts 2024-01-15, 2024/1/15, 2024-01, 01/15/2024, 15/01/2024 (when day > 12),
+// 1/15/24, 01-2024, "Jan 2024", "January 15, 2024". Returns "YYYY-MM-DD" or null.
+function normalizeDate(raw) {
+  if (raw === null || raw === undefined) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  const mk = (y, mo, da) => (mo >= 1 && mo <= 12 && da >= 1 && da <= 31) ? `${y}-${pad2(mo)}-${pad2(da)}` : null;
+  let m;
+  if ((m = s.match(/^(\d{4})[-\/.](\d{1,2})(?:[-\/.](\d{1,2}))?(?:$|[T\s])/))) return mk(+m[1], +m[2], m[3] ? +m[3] : 1);
+  if ((m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2}|\d{4})$/))) {
+    let a = +m[1], b = +m[2], y = +m[3];
+    if (y < 100) y += 2000;
+    return (a > 12 && b <= 12) ? mk(y, b, a) : mk(y, a, b); // US month/day unless the first number can't be a month
+  }
+  if ((m = s.match(/^(\d{1,2})[-\/.](\d{4})$/))) return mk(+m[2], +m[1], 1);
+  const d = new Date(s);
+  if (!isNaN(d)) return mk(d.getFullYear(), d.getMonth() + 1, d.getDate());
+  return null;
 }
 
 /* ============================================================
@@ -956,18 +992,16 @@ function generateDummyData() {
   const productNames = ['Widget Alpha', 'Gadget Beta', 'Gizmo Gamma', 'Device Delta', 'Module Epsilon'];
   const months = years * 12;
   const rows = [];
-  const startDate = new Date();
-  startDate.setMonth(startDate.getMonth() - months);
-  startDate.setDate(1);
+  const now = new Date();
+  const startYM = addMonthsYM(`${now.getFullYear()}-${pad2(now.getMonth() + 1)}`, -months);
 
   for (let p = 0; p < numProducts; p++) {
     const baseQty = 80 + Math.random() * 60;
     for (let m = 0; m < months; m++) {
-      const d = new Date(startDate);
-      d.setMonth(d.getMonth() + m);
+      const ym = addMonthsYM(startYM, m);
 
       let seasonal = 0;
-      const mo = d.getMonth();
+      const mo = Number(ym.slice(5, 7)) - 1;
       if (season === 'retail') {
         const seasonalFactors = [0.85, 0.80, 0.90, 0.95, 1.00, 1.05, 1.00, 0.95, 1.05, 1.10, 1.30, 1.50];
         seasonal = (seasonalFactors[mo] - 1) * baseQty;
@@ -982,7 +1016,7 @@ function generateDummyData() {
       const price = 15 + Math.random() * 35;
 
       rows.push({
-        date: d.toISOString().slice(0, 10),
+        date: `${ym}-01`,
         product: productNames[p],
         quantity: qty,
         revenue: Math.round(qty * price * 100) / 100
@@ -1022,7 +1056,7 @@ function showDataPreview() {
   const preview = currentData.rows.slice(0, 200);
   let html = '<table><thead><tr><th>#</th><th>Date</th><th>Product</th><th>Quantity</th><th>Revenue</th></tr></thead><tbody>';
   preview.forEach((r, i) => {
-    html += `<tr><td>${i+1}</td><td>${r.date}</td><td>${r.product}</td><td>${r.quantity}</td><td>${r.revenue ? '$'+r.revenue.toFixed(2) : '-'}</td></tr>`;
+    html += `<tr><td>${i+1}</td><td>${escapeHTML(r.date)}</td><td>${escapeHTML(r.product)}</td><td>${r.quantity}</td><td>${r.revenue ? '$'+r.revenue.toFixed(2) : '-'}</td></tr>`;
   });
   if (currentData.rows.length > 200) html += `<tr><td colspan="5" style="text-align:center;color:var(--text-secondary)">... and ${currentData.rows.length - 200} more rows</td></tr>`;
   html += '</tbody></table>';
@@ -1049,7 +1083,7 @@ function loadSavedDatasets() {
   }
   container.innerHTML = datasets.map((ds, i) => `
     <div class="dataset-chip" onclick="loadDataset(${i})">
-      ${ds.name} (${ds.rows.length} rows)
+      ${escapeHTML(ds.name)} (${ds.rows.length} rows)
       <span class="del" onclick="event.stopPropagation();deleteDataset(${i})">&times;</span>
     </div>
   `).join('');
@@ -1095,8 +1129,8 @@ function refreshForecastScreen() {
   if (hasData) {
     const sel = document.getElementById('productFilter');
     const products = [...new Set(currentData.rows.map(r => r.product))];
-    sel.innerHTML = '<option value="__all__">All Products (aggregated)</option>';
-    products.forEach(p => { sel.innerHTML += `<option value="${p}">${p}</option>`; });
+    sel.innerHTML = '<option value="__all__">All Products (aggregated)</option>' +
+      products.map(p => `<option value="${escapeHTML(p)}">${escapeHTML(p)}</option>`).join('');
   }
 }
 
@@ -1117,8 +1151,13 @@ function prepareTimeSeries(productFilter) {
     monthly[key] += r.quantity;
   });
 
-  const labels = Object.keys(monthly).sort();
-  const values = labels.map(k => monthly[k]);
+  // Fill in months with no sales as 0 so seasonal methods stay aligned with the calendar
+  const keys = Object.keys(monthly).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
+  const labels = [];
+  if (keys.length) {
+    for (let ym = keys[0]; ym <= keys[keys.length - 1]; ym = addMonthsYM(ym, 1)) labels.push(ym);
+  }
+  const values = labels.map(k => monthly[k] || 0);
   return { labels, values };
 }
 
@@ -1176,19 +1215,38 @@ function forecastWMA(values, horizon, window) {
 // 3. Single Exponential Smoothing
 function forecastSES(values, horizon, alpha) {
   const n = values.length;
+  // fitted[i] is the forecast for period i made using data up to i-1 only
   const fitted = new Array(n).fill(null);
-  fitted[0] = values[0];
+  let level = values[0];
   for (let i = 1; i < n; i++) {
-    fitted[i] = alpha * values[i - 1] + (1 - alpha) * fitted[i - 1];
+    fitted[i] = level;
+    level = alpha * values[i] + (1 - alpha) * level;
   }
-  const lastLevel = alpha * values[n - 1] + (1 - alpha) * fitted[n - 1];
-  const forecast = new Array(horizon).fill(lastLevel);
+  const forecast = new Array(horizon).fill(level);
   return { fitted, forecast };
 }
 
 // 4. Linear Regression
+function fitLine(values) {
+  const n = values.length;
+  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+  for (let i = 0; i < n; i++) {
+    sumX += i; sumY += values[i];
+    sumXY += i * values[i]; sumX2 += i * i;
+  }
+  const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / n;
+  return { slope, intercept };
+}
+
 function forecastLR(values, horizon) {
   const n = values.length;
+  // Honest accuracy check: refit on data up to i-1, then predict period i
+  const evalFit = new Array(n).fill(null);
+  for (let i = 3; i < n; i++) {
+    const { slope: s, intercept: b } = fitLine(values.slice(0, i));
+    evalFit[i] = b + s * i;
+  }
   let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
   for (let i = 0; i < n; i++) {
     sumX += i; sumY += values[i];
@@ -1202,22 +1260,23 @@ function forecastLR(values, horizon) {
   for (let h = 0; h < horizon; h++) {
     forecast.push(intercept + slope * (n + h));
   }
-  return { fitted, forecast, slope, intercept };
+  return { fitted, evalFit, forecast, slope, intercept };
 }
 
 // 5. Holt's Double Exponential Smoothing
 function forecastHolt(values, horizon, alpha, beta) {
   const n = values.length;
-  let level = values[0];
-  let trendVal = values.length > 1 ? values[1] - values[0] : 0;
-  const fitted = [level];
+  let level = values[1];
+  let trendVal = values[1] - values[0];
+  // fitted[i] is the forecast for period i made before seeing values[i]
+  const fitted = new Array(n).fill(null);
 
-  for (let i = 1; i < n; i++) {
+  for (let i = 2; i < n; i++) {
+    fitted[i] = level + trendVal;
     const newLevel = alpha * values[i] + (1 - alpha) * (level + trendVal);
     const newTrend = beta * (newLevel - level) + (1 - beta) * trendVal;
     level = newLevel;
     trendVal = newTrend;
-    fitted.push(level + trendVal);
   }
 
   const forecast = [];
@@ -1229,74 +1288,54 @@ function forecastHolt(values, horizon, alpha, beta) {
 
 // 6. Holt-Winters Triple Exponential Smoothing
 function forecastHW(values, horizon, alpha, beta, gamma, period, variant) {
+  // Requires at least two full seasons (checked in runForecast)
   const n = values.length;
-  if (n < period * 2) {
-    // Fallback to Holt's if not enough data
-    return forecastHolt(values, horizon, alpha, beta);
-  }
-
   const isAdd = variant === 'additive';
 
-  // Initialize seasonal component
-  const seasonal = new Array(n + horizon).fill(0);
-  let level, trendVal;
+  // Initial level and trend from the first two seasons
+  let avg1 = 0, avg2 = 0;
+  for (let i = 0; i < period; i++) avg1 += values[i];
+  for (let i = period; i < period * 2; i++) avg2 += values[i];
+  avg1 /= period; avg2 /= period;
+  let trendVal = (avg2 - avg1) / period;
+  // avg1 describes the middle of season 1; move it to the end of season 1, where updating starts
+  let level = avg1 + trendVal * (period - 1) / 2;
 
-  // Initial level and trend from first season
-  let firstSeasonAvg = 0;
-  for (let i = 0; i < period; i++) firstSeasonAvg += values[i];
-  firstSeasonAvg /= period;
-
-  let secondSeasonAvg = 0;
-  for (let i = period; i < period * 2; i++) secondSeasonAvg += values[i];
-  secondSeasonAvg /= period;
-
-  level = firstSeasonAvg;
-  trendVal = (secondSeasonAvg - firstSeasonAvg) / period;
-
-  // Initial seasonal indices
+  // S[t] = seasonal index for period t. First season initialised from de-trended data, then updated every step.
+  const S = new Array(n).fill(isAdd ? 0 : 1);
   for (let i = 0; i < period; i++) {
-    if (isAdd) {
-      seasonal[i] = values[i] - firstSeasonAvg;
-    } else {
-      seasonal[i] = firstSeasonAvg > 0 ? values[i] / firstSeasonAvg : 1;
-    }
+    const base = avg1 + trendVal * (i - (period - 1) / 2);
+    S[i] = isAdd ? values[i] - base : (base > 0 ? values[i] / base : 1);
   }
 
+  // fitted[t] is the forecast for period t made before seeing values[t]
   const fitted = new Array(n).fill(null);
-  fitted[0] = isAdd ? level + trendVal + seasonal[0] : (level + trendVal) * seasonal[0];
-
-  for (let i = 1; i < n; i++) {
-    const prevSeasonal = seasonal[i % period >= 0 ? i % period : i];
+  for (let t = period; t < n; t++) {
+    const y = values[t];
+    const sPrev = S[t - period];
+    fitted[t] = isAdd ? level + trendVal + sPrev : (level + trendVal) * sPrev;
+    let newLevel;
     if (isAdd) {
-      const newLevel = alpha * (values[i] - seasonal[i % period]) + (1 - alpha) * (level + trendVal);
-      const newTrend = beta * (newLevel - level) + (1 - beta) * trendVal;
-      seasonal[i + period] = gamma * (values[i] - newLevel) + (1 - gamma) * seasonal[i % period];
-      level = newLevel;
-      trendVal = newTrend;
-      fitted[i] = level + trendVal + seasonal[i % period];
+      newLevel = alpha * (y - sPrev) + (1 - alpha) * (level + trendVal);
+      S[t] = gamma * (y - newLevel) + (1 - gamma) * sPrev;
     } else {
-      const s = seasonal[i % period] || 1;
-      const newLevel = alpha * (values[i] / s) + (1 - alpha) * (level + trendVal);
-      const newTrend = beta * (newLevel - level) + (1 - beta) * trendVal;
-      seasonal[i + period] = gamma * (values[i] / newLevel) + (1 - gamma) * s;
-      level = newLevel;
-      trendVal = newTrend;
-      fitted[i] = (level + trendVal) * s;
+      newLevel = alpha * (sPrev > 0 ? y / sPrev : y) + (1 - alpha) * (level + trendVal);
+      S[t] = newLevel > 0 ? gamma * (y / newLevel) + (1 - gamma) * sPrev : sPrev;
     }
+    trendVal = beta * (newLevel - level) + (1 - beta) * trendVal;
+    level = newLevel;
   }
+
+  // Accuracy is only scored from the third season on: the second season was used to set the starting trend
+  const evalFit = fitted.map((v, t) => t >= period * 2 ? v : null);
 
   const forecast = [];
   for (let h = 1; h <= horizon; h++) {
-    const sIdx = ((n + h - 1) % period) + n - (n % period);
-    const s = seasonal[sIdx] || (isAdd ? 0 : 1);
-    if (isAdd) {
-      forecast.push(level + h * trendVal + s);
-    } else {
-      forecast.push((level + h * trendVal) * s);
-    }
+    const s = S[n - period + ((h - 1) % period)];
+    forecast.push(isAdd ? level + h * trendVal + s : (level + h * trendVal) * s);
   }
 
-  return { fitted, forecast };
+  return { fitted, evalFit, forecast };
 }
 
 // 7. Seasonal Naive
@@ -1316,6 +1355,18 @@ function forecastSNaive(values, horizon, period) {
 
 // 8. Seasonal Decomposition
 function forecastDecomp(values, horizon, period) {
+  const result = decompCore(values, horizon, period);
+  // Honest accuracy check: decompose data up to t-1 only, then predict period t
+  const n = values.length;
+  result.evalFit = new Array(n).fill(null);
+  for (let t = period * 2; t < n; t++) {
+    const v = decompCore(values.slice(0, t), 1, period).forecast[0];
+    result.evalFit[t] = Number.isFinite(v) ? v : null;
+  }
+  return result;
+}
+
+function decompCore(values, horizon, period) {
   const n = values.length;
 
   // Compute trend via centered moving average
@@ -1373,27 +1424,48 @@ function forecastDecomp(values, horizon, period) {
 /* ============================================================
    ACCURACY METRICS
    ============================================================ */
-function computeMetrics(actual, fitted) {
+// The predictions used to score a method: honest one-step-ahead forecasts
+function evalSeries(m) { return m.evalFit || m.fitted; }
+function isNum(v) { return v !== null && v !== undefined && Number.isFinite(v); }
+function fmt(v, d) { return Number.isFinite(v) ? v.toFixed(d) : 'n/a'; }
+
+function computeMetrics(actual, fitted, from = 0) {
   let mae = 0, mape = 0, rmse = 0, sumError = 0, sumAbsError = 0;
-  let count = 0;
-  for (let i = 0; i < actual.length; i++) {
-    if (fitted[i] === null || fitted[i] === undefined) continue;
+  let count = 0, mapeCount = 0;
+  for (let i = from; i < actual.length; i++) {
+    if (!isNum(fitted[i])) continue;
     const err = actual[i] - fitted[i];
     const absErr = Math.abs(err);
     mae += absErr;
-    if (actual[i] !== 0) mape += absErr / Math.abs(actual[i]);
+    if (actual[i] !== 0) { mape += absErr / Math.abs(actual[i]); mapeCount++; }
     rmse += err * err;
     sumError += err;
     sumAbsError += absErr;
     count++;
   }
-  if (count === 0) return { mae: 0, mape: 0, rmse: 0, trackingSignal: 0 };
+  // Too few checkable periods: report "n/a" (Infinity) so this method can never win by default
+  if (count < 3) return { mae: Infinity, mape: Infinity, rmse: Infinity, trackingSignal: NaN, count };
   mae /= count;
-  mape = (mape / count) * 100;
+  mape = mapeCount ? (mape / mapeCount) * 100 : Infinity;
   rmse = Math.sqrt(rmse / count);
   const mad = sumAbsError / count;
   const trackingSignal = mad > 0 ? sumError / mad : 0;
-  return { mae, mape, rmse, trackingSignal };
+  return { mae, mape, rmse, trackingSignal, count };
+}
+
+// Spread of honest one-step-ahead errors (sample standard deviation)
+function residualStd(m, actual) {
+  const e = evalSeries(m);
+  const r = [];
+  for (let i = m.evalStart || 0; i < actual.length; i++) if (isNum(e[i])) r.push(actual[i] - e[i]);
+  if (r.length < 2) return 0;
+  return Math.sqrt(r.reduce((s, x) => s + x * x, 0) / (r.length - 1));
+}
+
+// Approximate 95% interval for step h (0-based): width grows with the square root of the horizon
+function ciBounds(v, h, std) {
+  const w = 1.96 * std * Math.sqrt(h + 1);
+  return { lower: Math.max(0, v - w), upper: v + w };
 }
 
 /* ============================================================
@@ -1437,36 +1509,52 @@ function runForecast() {
     const b = parseInt(document.getElementById('holtBeta').value) / 100;
     methods.holt = { ...forecastHolt(values, horizon, a, b), params: { alpha: a, beta: b } };
   }
+  const skipped = [];
   if (selectedMethods.includes('hw')) {
     const a = parseInt(document.getElementById('hwAlpha').value) / 100;
     const b = parseInt(document.getElementById('hwBeta').value) / 100;
     const g = parseInt(document.getElementById('hwGamma').value) / 100;
     const p = parseInt(document.getElementById('hwPeriod').value);
     const v = document.getElementById('hwVariant').value;
-    methods.hw = { ...forecastHW(values, horizon, a, b, g, p, v), params: { alpha: a, beta: b, gamma: g, period: p, variant: v } };
+    if (values.length >= p * 2) {
+      methods.hw = { ...forecastHW(values, horizon, a, b, g, p, v), params: { alpha: a, beta: b, gamma: g, period: p, variant: v } };
+    } else skipped.push(`${METHOD_NAMES.hw} (needs ${p * 2}+ months)`);
   }
   if (selectedMethods.includes('snaive')) {
     const p = parseInt(document.getElementById('snaivePeriod').value);
-    methods.snaive = { ...forecastSNaive(values, horizon, p), params: { period: p } };
+    if (values.length > p) {
+      methods.snaive = { ...forecastSNaive(values, horizon, p), params: { period: p } };
+    } else skipped.push(`${METHOD_NAMES.snaive} (needs ${p + 1}+ months)`);
   }
   if (selectedMethods.includes('decomp')) {
     const p = parseInt(document.getElementById('decompPeriod').value);
-    methods.decomp = { ...forecastDecomp(values, horizon, p), params: { period: p } };
+    if (values.length >= p * 2) {
+      methods.decomp = { ...forecastDecomp(values, horizon, p), params: { period: p } };
+    } else skipped.push(`${METHOD_NAMES.decomp} (needs ${p * 2}+ months)`);
+  }
+  if (!Object.keys(methods).length) {
+    showToast(`Not enough data for the selected methods: ${skipped.join(', ')}`);
+    return;
   }
 
-  // Compute metrics
-  Object.keys(methods).forEach(key => {
-    methods[key].metrics = computeMetrics(values, methods[key].fitted);
+  // Score every method on the SAME months, using honest one-step-ahead forecasts.
+  // The window starts where the slowest method can first make a prediction.
+  const n = values.length;
+  let evalStart = 0;
+  Object.values(methods).forEach(m => {
+    const first = evalSeries(m).findIndex(isNum);
+    if (first > evalStart) evalStart = first;
+  });
+  const fairWindow = n - evalStart >= 3;
+  Object.values(methods).forEach(m => {
+    m.evalStart = fairWindow ? evalStart : 0;
+    m.metrics = computeMetrics(values, evalSeries(m), m.evalStart);
   });
 
-  // Generate forecast labels
+  // Generate forecast labels (plain month arithmetic: no timezone shifts)
   const lastDate = labels[labels.length - 1];
   const forecastLabels = [];
-  const [y, m] = lastDate.split('-').map(Number);
-  for (let h = 1; h <= horizon; h++) {
-    const nd = new Date(y, m - 1 + h, 1);
-    forecastLabels.push(nd.toISOString().slice(0, 7));
-  }
+  for (let h = 1; h <= horizon; h++) forecastLabels.push(addMonthsYM(lastDate, h));
 
   forecastResults = {
     methods,
@@ -1474,7 +1562,9 @@ function runForecast() {
     labels,
     forecastLabels,
     historicalValues: values,
-    productFilter
+    productFilter,
+    evalPeriods: fairWindow ? n - evalStart : null,
+    skipped
   };
 
   // Find best method
@@ -1482,6 +1572,7 @@ function runForecast() {
   Object.entries(methods).forEach(([key, m]) => {
     if (m.metrics.mape < bestMAPE) { bestMAPE = m.metrics.mape; bestKey = key; }
   });
+  if (!bestKey) bestKey = Object.keys(methods)[0];
   selectedReportMethod = bestKey;
 
   // Save last forecast
@@ -1489,7 +1580,7 @@ function runForecast() {
 
   renderForecastChart();
   if (methods.decomp) renderDecompCharts(values, labels, methods.decomp);
-  showToast('Forecast complete!');
+  showToast(skipped.length ? `Forecast complete. Skipped: ${skipped.join(', ')}` : 'Forecast complete!');
 }
 
 /* ============================================================
@@ -1516,17 +1607,12 @@ function renderForecastChart() {
   // Add confidence band for best method
   const bestMethod = methods[selectedReportMethod];
   if (bestMethod) {
-    const residuals = [];
-    for (let i = 0; i < historicalValues.length; i++) {
-      if (bestMethod.fitted[i] !== null) residuals.push(historicalValues[i] - bestMethod.fitted[i]);
-    }
-    const std = Math.sqrt(residuals.reduce((s, r) => s + r * r, 0) / residuals.length) || 1;
-
-    const upperCI = [...new Array(labels.length).fill(null), ...bestMethod.forecast.map((v, h) => v + 1.96 * std * Math.sqrt(1 + h * 0.1))];
-    const lowerCI = [...new Array(labels.length).fill(null), ...bestMethod.forecast.map((v, h) => Math.max(0, v - 1.96 * std * Math.sqrt(1 + h * 0.1)))];
+    const std = residualStd(bestMethod, historicalValues);
+    const upperCI = [...new Array(labels.length).fill(null), ...bestMethod.forecast.map((v, h) => ciBounds(v, h, std).upper)];
+    const lowerCI = [...new Array(labels.length).fill(null), ...bestMethod.forecast.map((v, h) => ciBounds(v, h, std).lower)];
 
     datasets.push({
-      label: 'Upper CI (95%)',
+      label: 'Upper 95% (approx.)',
       data: upperCI,
       borderColor: 'transparent',
       backgroundColor: 'rgba(59,130,246,0.1)',
@@ -1534,7 +1620,7 @@ function renderForecastChart() {
       pointRadius: 0,
     });
     datasets.push({
-      label: 'Lower CI (95%)',
+      label: 'Lower 95% (approx.)',
       data: lowerCI,
       borderColor: 'transparent',
       backgroundColor: 'transparent',
@@ -1630,8 +1716,12 @@ function refreshCompareScreen() {
 
 function renderComparison() {
   const { methods } = forecastResults;
-  const entries = Object.entries(methods).sort((a, b) => a[1].metrics.mape - b[1].metrics.mape);
+  const entries = Object.entries(methods).sort((a, b) => (a[1].metrics.mape - b[1].metrics.mape) || 0);
   const bestKey = entries[0][0];
+  const { evalPeriods } = forecastResults;
+  const scoreNote = evalPeriods
+    ? `Scored on honest one-step-ahead forecasts over the same last ${evalPeriods} months for every method.`
+    : 'Not enough history to score all methods on the same months; scores are less comparable.';
 
   // Best method banner
   document.getElementById('bestMethodBanner').innerHTML = `
@@ -1639,7 +1729,8 @@ function renderComparison() {
       <div class="trophy">&#127942;</div>
       <div>
         <h3>Best Method: ${METHOD_NAMES[bestKey]}</h3>
-        <p>MAPE: ${entries[0][1].metrics.mape.toFixed(2)}% | MAE: ${entries[0][1].metrics.mae.toFixed(1)} | RMSE: ${entries[0][1].metrics.rmse.toFixed(1)}</p>
+        <p>MAPE: ${fmt(entries[0][1].metrics.mape, 2)}% | MAE: ${fmt(entries[0][1].metrics.mae, 1)} | RMSE: ${fmt(entries[0][1].metrics.rmse, 1)}</p>
+        <p style="font-size:0.8rem;opacity:0.8">${scoreNote}</p>
       </div>
     </div>
   `;
@@ -1649,10 +1740,10 @@ function renderComparison() {
   tbody.innerHTML = entries.map(([key, m]) => `
     <tr style="${key === bestKey ? 'background:rgba(16,185,129,0.08)' : ''}">
       <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${METHOD_COLORS[key]};margin-right:6px"></span>${METHOD_NAMES[key]}</td>
-      <td>${m.metrics.mae.toFixed(2)}</td>
-      <td>${m.metrics.mape.toFixed(2)}%</td>
-      <td>${m.metrics.rmse.toFixed(2)}</td>
-      <td>${m.metrics.trackingSignal.toFixed(2)}</td>
+      <td>${fmt(m.metrics.mae, 2)}</td>
+      <td>${fmt(m.metrics.mape, 2)}%</td>
+      <td>${fmt(m.metrics.rmse, 2)}</td>
+      <td>${fmt(m.metrics.trackingSignal, 2)}</td>
       <td><button class="btn btn-sm ${key === selectedReportMethod ? 'btn-primary' : ''}" onclick="selectReportMethod('${key}')">
         ${key === selectedReportMethod ? 'Selected' : 'Use for Report'}
       </button></td>
@@ -1668,7 +1759,7 @@ function renderComparison() {
       labels: entries.map(([k]) => METHOD_NAMES[k]),
       datasets: [{
         label: 'MAPE (%)',
-        data: entries.map(([, m]) => m.metrics.mape),
+        data: entries.map(([, m]) => Number.isFinite(m.metrics.mape) ? m.metrics.mape : null),
         backgroundColor: entries.map(([k]) => METHOD_COLORS[k]),
         borderRadius: 4
       }]
@@ -1719,15 +1810,11 @@ function renderReport() {
     <div class="stat-card"><div class="stat-value">${method.forecast.length}</div><div class="stat-label">Forecast Periods</div></div>
     <div class="stat-card"><div class="stat-value">${Math.round(avgHist).toLocaleString()}</div><div class="stat-label">Avg Historical</div></div>
     <div class="stat-card"><div class="stat-value">${Math.round(avgForecast).toLocaleString()}</div><div class="stat-label">Avg Forecast</div></div>
-    <div class="stat-card"><div class="stat-value">${method.metrics.mape.toFixed(1)}%</div><div class="stat-label">MAPE</div></div>
+    <div class="stat-card"><div class="stat-value">${fmt(method.metrics.mape, 1)}%</div><div class="stat-label">MAPE</div></div>
   `;
 
   // Chart
-  const residuals = [];
-  for (let i = 0; i < historicalValues.length; i++) {
-    if (method.fitted[i] !== null) residuals.push(historicalValues[i] - method.fitted[i]);
-  }
-  const std = Math.sqrt(residuals.reduce((s, r) => s + r * r, 0) / residuals.length) || 1;
+  const std = residualStd(method, historicalValues);
 
   const allLabels = [...labels, ...forecastLabels];
   if (charts.report) charts.report.destroy();
@@ -1749,14 +1836,14 @@ function renderReport() {
           pointRadius: 3, fill: false, tension: 0.3
         },
         {
-          label: 'Upper CI (95%)',
-          data: [...new Array(labels.length).fill(null), ...method.forecast.map((v, h) => v + 1.96 * std * Math.sqrt(1 + h * 0.1))],
+          label: 'Upper 95% (approx.)',
+          data: [...new Array(labels.length).fill(null), ...method.forecast.map((v, h) => ciBounds(v, h, std).upper)],
           borderColor: 'transparent', backgroundColor: 'rgba(59,130,246,0.1)',
           fill: '+1', pointRadius: 0
         },
         {
-          label: 'Lower CI (95%)',
-          data: [...new Array(labels.length).fill(null), ...method.forecast.map((v, h) => Math.max(0, v - 1.96 * std * Math.sqrt(1 + h * 0.1)))],
+          label: 'Lower 95% (approx.)',
+          data: [...new Array(labels.length).fill(null), ...method.forecast.map((v, h) => ciBounds(v, h, std).lower)],
           borderColor: 'transparent', backgroundColor: 'transparent',
           fill: false, pointRadius: 0
         }
@@ -1775,8 +1862,7 @@ function renderReport() {
   // Forecast table
   const tbody = document.getElementById('reportForecastBody');
   tbody.innerHTML = method.forecast.map((v, i) => {
-    const upper = v + 1.96 * std * Math.sqrt(1 + i * 0.1);
-    const lower = Math.max(0, v - 1.96 * std * Math.sqrt(1 + i * 0.1));
+    const { lower, upper } = ciBounds(v, i, std);
     return `<tr>
       <td>${forecastLabels[i]}</td>
       <td>${Math.round(v).toLocaleString()}</td>
@@ -1789,10 +1875,14 @@ function renderReport() {
   document.getElementById('reportAccuracy').innerHTML = `
     <div class="form-row" style="gap:20px">
       <div><strong>Method:</strong> ${METHOD_NAMES[selectedReportMethod]}</div>
-      <div><strong>MAE:</strong> ${method.metrics.mae.toFixed(2)}</div>
-      <div><strong>MAPE:</strong> ${method.metrics.mape.toFixed(2)}%</div>
-      <div><strong>RMSE:</strong> ${method.metrics.rmse.toFixed(2)}</div>
-      <div><strong>Tracking Signal:</strong> ${method.metrics.trackingSignal.toFixed(2)}</div>
+      <div><strong>MAE:</strong> ${fmt(method.metrics.mae, 2)}</div>
+      <div><strong>MAPE:</strong> ${fmt(method.metrics.mape, 2)}%</div>
+      <div><strong>RMSE:</strong> ${fmt(method.metrics.rmse, 2)}</div>
+      <div><strong>Tracking Signal:</strong> ${fmt(method.metrics.trackingSignal, 2)}</div>
+    </div>
+    <div class="mt-12 text-muted">
+      Accuracy is measured on one-step-ahead forecasts (each month predicted using only earlier months).
+      The 95% range is an approximation based on those forecast errors.
     </div>
     <div class="mt-12 text-muted">
       ${method.params ? 'Parameters: ' + Object.entries(method.params).map(([k,v]) => `${k}=${v}`).join(', ') : ''}
@@ -1807,20 +1897,15 @@ function exportCSV() {
   if (!forecastResults || !selectedReportMethod) return;
   const { methods, labels, forecastLabels, historicalValues } = forecastResults;
   const method = methods[selectedReportMethod];
-  const residuals = [];
-  for (let i = 0; i < historicalValues.length; i++) {
-    if (method.fitted[i] !== null) residuals.push(historicalValues[i] - method.fitted[i]);
-  }
-  const std = Math.sqrt(residuals.reduce((s, r) => s + r * r, 0) / residuals.length) || 1;
+  const std = residualStd(method, historicalValues);
 
-  let csv = 'Period,Type,Value,Lower_CI_95,Upper_CI_95\n';
+  let csv = 'Period,Type,Value,Lower_95_Approx,Upper_95_Approx\n';
   labels.forEach((l, i) => {
     csv += `${l},Historical,${historicalValues[i]},,\n`;
   });
   method.forecast.forEach((v, i) => {
-    const upper = v + 1.96 * std * Math.sqrt(1 + i * 0.1);
-    const lower = Math.max(0, v - 1.96 * std * Math.sqrt(1 + i * 0.1));
-    csv += `${forecastLabels[i]},Forecast,${Math.round(v)},${Math.round(lower)},${Math.round(upper)}\n`;
+    const { lower, upper } = ciBounds(v, i, std);
+    csv +=`${forecastLabels[i]},Forecast,${Math.round(v)},${Math.round(lower)},${Math.round(upper)}\n`;
   });
 
   const blob = new Blob([csv], { type: 'text/csv' });
@@ -1837,16 +1922,11 @@ function copyForecastTable() {
   const { methods, forecastLabels } = forecastResults;
   const method = methods[selectedReportMethod];
   const historicalValues = forecastResults.historicalValues;
-  const residuals = [];
-  for (let i = 0; i < historicalValues.length; i++) {
-    if (method.fitted[i] !== null) residuals.push(historicalValues[i] - method.fitted[i]);
-  }
-  const std = Math.sqrt(residuals.reduce((s, r) => s + r * r, 0) / residuals.length) || 1;
+  const std = residualStd(method, historicalValues);
 
-  let text = 'Period\tPredicted\tLower CI\tUpper CI\n';
+  let text = 'Period\tPredicted\tLower 95% (approx.)\tUpper 95% (approx.)\n';
   method.forecast.forEach((v, i) => {
-    const upper = v + 1.96 * std * Math.sqrt(1 + i * 0.1);
-    const lower = Math.max(0, v - 1.96 * std * Math.sqrt(1 + i * 0.1));
+    const { lower, upper } = ciBounds(v, i, std);
     text += `${forecastLabels[i]}\t${Math.round(v)}\t${Math.round(lower)}\t${Math.round(upper)}\n`;
   });
 
