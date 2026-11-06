@@ -68,7 +68,7 @@ nav {
 .nav-brand {
   font-weight: 700; font-size: 1.15rem; margin-right: 32px;
   display: flex; align-items: center; gap: 8px;
-  color: var(--primary);
+  color: var(--primary); white-space: nowrap;
 }
 .nav-brand svg { width: 22px; height: 22px; }
 .nav-tabs { display: flex; gap: 4px; flex: 1; }
@@ -76,8 +76,9 @@ nav {
   padding: 8px 18px; border-radius: var(--radius-sm);
   cursor: pointer; font-weight: 500; font-size: 0.9rem;
   color: var(--text-secondary); transition: all 0.15s;
-  border: none; background: none;
+  border: none; background: none; white-space: nowrap;
 }
+.label-short { display: none; }
 .nav-tab:hover { background: var(--primary-light); color: var(--primary); }
 .nav-tab.active { background: var(--primary); color: #fff; }
 .nav-actions { display: flex; align-items: center; gap: 10px; }
@@ -245,6 +246,29 @@ input[type="range"]::-webkit-slider-thumb {
 .legal-note a:hover { color: var(--text); }
 .legal-sep { margin: 0 9px; opacity: 0.6; }
 
+/* ===== How to Use guide ===== */
+.guide { max-width: 860px; margin: 0 auto; }
+.guide-intro h2 { font-size: 1.6rem; margin-bottom: 6px; }
+.guide-intro p { color: var(--text-secondary); font-size: 1rem; }
+.guide-step { display: flex; gap: 16px; }
+.guide-num {
+  flex: 0 0 34px; height: 34px; border-radius: 50%;
+  background: var(--primary); color: #fff; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.guide-body { flex: 1; min-width: 0; }
+.guide-body h3 { font-size: 1.15rem; margin: 4px 0 8px; }
+.guide-body p, .guide-body li { font-size: 0.97rem; line-height: 1.65; }
+.guide-body p + p, .guide-body p + ul, .guide-body ul + p, .guide-body pre + p { margin-top: 8px; }
+.guide-body ul { padding-left: 20px; margin-top: 6px; }
+.guide-body li + li { margin-top: 4px; }
+.guide-body pre {
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 10px 14px; margin-top: 8px; font-family: var(--mono); font-size: 0.88rem; overflow-x: auto;
+}
+.guide-body code { font-family: var(--mono); font-size: 0.9em; }
+.guide-body .btn { margin-top: 12px; }
+
 /* ===== Report Print ===== */
 @media print {
   nav, .no-print { display: none !important; }
@@ -258,10 +282,21 @@ input[type="range"]::-webkit-slider-thumb {
 /* ===== Responsive ===== */
 @media (max-width: 768px) {
   .nav-brand span { display: none; }
-  .nav-tab { padding: 8px 12px; font-size: 0.82rem; }
+  nav { padding: 0 10px; }
+  .nav-brand { margin-right: 8px; }
+  .nav-tabs { gap: 2px; overflow-x: auto; scrollbar-width: none; min-width: 0; }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+  .nav-tab { padding: 8px 9px; font-size: 0.82rem; white-space: nowrap; flex-shrink: 0; }
   main { padding: calc(var(--nav-height) + 12px) 12px 12px; }
   .form-row { grid-template-columns: 1fr; }
   .stats-row { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 900px) {
+  .label-full { display: none; }
+  .label-short { display: inline; }
+}
+@media (max-width: 420px) {
+  .nav-brand { display: none; }
 }
 
 /* ===== Misc ===== */
@@ -337,6 +372,7 @@ input[type="range"]::-webkit-slider-thumb {
     <button class="nav-tab" data-screen="forecast">Forecast</button>
     <button class="nav-tab" data-screen="compare">Compare</button>
     <button class="nav-tab" data-screen="report">Report</button>
+    <button class="nav-tab" data-screen="guide"><span class="label-full">How to Use</span><span class="label-short">Guide</span></button>
   </div>
   <div class="nav-actions">
     <button class="theme-toggle" id="themeToggle" title="Toggle theme">&#9789;</button>
@@ -709,6 +745,106 @@ input[type="range"]::-webkit-slider-thumb {
     <div class="card">
       <div class="card-title">Accuracy Summary</div>
       <div id="reportAccuracy"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== HOW TO USE SCREEN ==================== -->
+<div id="screen-guide" class="screen">
+  <div class="guide">
+    <div class="card guide-intro">
+      <h2>How to use</h2>
+      <p>This app looks at your past monthly sales and predicts the next few months. It tries several forecasting methods, checks how accurate each one would have been on your own history, and recommends the best one. Everything runs in your browser. Your data never leaves your computer.</p>
+    </div>
+
+    <div class="card guide-step">
+      <div class="guide-num">1</div>
+      <div class="guide-body">
+        <h3>Load your data (Data tab)</h3>
+        <p>Pick one of three ways:</p>
+        <ul>
+          <li><strong>Just trying it out?</strong> Under <em>Generate Sample Data</em>, choose a time range, seasonality, trend and noise level, then click <strong>Generate Data</strong>. 2 years or more works best.</li>
+          <li><strong>Have a spreadsheet?</strong> Save it as a CSV and drag it onto <em>Import CSV</em> (or click the box to browse).</li>
+          <li><strong>Only a few numbers?</strong> Type them into <em>Manual Entry</em>, use <strong>+ Add Row</strong> for more, then click <strong>Load Data</strong>.</li>
+        </ul>
+        <p>Your CSV needs a date column and a quantity column. Product and revenue columns are optional. For example:</p>
+        <pre>Date,Product,Quantity,Revenue
+2024-01-15,Widget A,120,2400
+2024-02-15,Widget A,135,2700
+2024-03-15,Widget A,128,2560</pre>
+        <p>The app finds columns by their headers. The date header should contain <code>date</code>, <code>month</code>, <code>period</code> or <code>time</code>. The quantity header should contain <code>quantity</code>, <code>qty</code>, <code>units</code>, <code>sales</code> or <code>demand</code>. Dates like <code>2024-01-15</code>, <code>2024-01</code>, <code>01/15/2024</code> and <code>Jan 2024</code> all work.</p>
+        <p>Sales are added up by month, and a month with no sales counts as 0. Check the <em>Data Preview</em> that appears, and click <strong>Save Dataset</strong> if you want to reload it later from <em>Saved Datasets</em>.</p>
+        <button class="btn btn-primary" onclick="switchTab('data')">Go to Data</button>
+      </div>
+    </div>
+
+    <div class="card guide-step">
+      <div class="guide-num">2</div>
+      <div class="guide-body">
+        <h3>Choose forecasting methods (Forecast tab)</h3>
+        <p>Tick the methods you want to try. If you're not sure, tick them all. The app will tell you which one fits your data best.</p>
+        <ul>
+          <li><strong>Simple / Weighted Moving Average:</strong> averages the last few months. Good for steady demand.</li>
+          <li><strong>Exponential Smoothing:</strong> a smoother average that gives recent months more weight.</li>
+          <li><strong>Linear Regression and Holt's:</strong> follow a rising or falling trend.</li>
+          <li><strong>Holt-Winters, Seasonal Naive and Seasonal Decomposition:</strong> handle repeating yearly patterns, like holiday peaks.</li>
+        </ul>
+        <p>You need at least 4 months of data. The seasonal methods need more: Seasonal Naive needs 13 months, and Holt-Winters and Seasonal Decomposition need 24 months (two full years). These numbers assume the default 12-month season; picking a 4-month (quarterly) season needs less. Any method that doesn't have enough data is skipped, and the app tells you why.</p>
+      </div>
+    </div>
+
+    <div class="card guide-step">
+      <div class="guide-num">3</div>
+      <div class="guide-body">
+        <h3>Set it up and run the forecast</h3>
+        <ul>
+          <li><strong>Forecast Horizon:</strong> how many months ahead to predict (1 to 24).</li>
+          <li><strong>Product Filter:</strong> forecast one product, or all products added together.</li>
+          <li><strong>Method sliders (optional):</strong> the defaults are sensible. A bigger window or a smaller alpha gives a smoother forecast that reacts more slowly to change.</li>
+        </ul>
+        <p>Click <strong>Run Forecast</strong>. The chart shows your history and each method's prediction. The shaded band around the best method is an approximate 95% range: the real number will most likely land inside it.</p>
+      </div>
+    </div>
+
+    <div class="card guide-step">
+      <div class="guide-num">4</div>
+      <div class="guide-body">
+        <h3>Find the most accurate method (Compare tab)</h3>
+        <p>Each method is tested honestly: for every past month, it predicts that month using only the months before it, and the app measures how far off it was. The method with the lowest MAPE is marked as the <strong>Best Method</strong>.</p>
+        <ul>
+          <li><strong>MAPE:</strong> the average error as a percentage. 10% means predictions were off by about 10% on average. Lower is better.</li>
+          <li><strong>MAE:</strong> the average error in units.</li>
+          <li><strong>RMSE:</strong> like MAE, but punishes big misses more.</li>
+          <li><strong>Tracking Signal:</strong> shows whether a method keeps guessing too high or too low. Close to 0 is good. Beyond about ±4 means it's consistently off in one direction.</li>
+        </ul>
+        <p>The best method is used for the report automatically. To use a different one, click <strong>Use for Report</strong> next to it.</p>
+      </div>
+    </div>
+
+    <div class="card guide-step">
+      <div class="guide-num">5</div>
+      <div class="guide-body">
+        <h3>Get your forecast (Report tab)</h3>
+        <p>The report shows the predicted value for each future month, with a low and high estimate. Use the low-to-high range to plan safety stock, not just the single predicted number.</p>
+        <ul>
+          <li><strong>Print / Save PDF:</strong> print the report or save it as a PDF.</li>
+          <li><strong>Export CSV:</strong> download history and forecast to open in Excel.</li>
+          <li><strong>Copy to Clipboard:</strong> paste the forecast table into a spreadsheet or email.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card guide-step">
+      <div class="guide-num">&#10003;</div>
+      <div class="guide-body">
+        <h3>Tips for better forecasts</h3>
+        <ul>
+          <li>More history is better. Two or more years lets the app pick up seasonal patterns.</li>
+          <li>Keep one row per sale or per month, and make sure units are consistent.</li>
+          <li>If one product behaves very differently from the rest, forecast it on its own using the Product Filter.</li>
+          <li>Re-run the forecast every month as new sales come in.</li>
+        </ul>
+      </div>
     </div>
   </div>
 </div>
